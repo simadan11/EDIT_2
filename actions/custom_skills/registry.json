@@ -1,0 +1,43 @@
+{
+    "skills": [
+        {
+            "name": "crypto_price",
+            "description": "Fetches current cryptocurrency price in USD (e.g. bitcoin, ethereum, solana). Created as a permanent custom skill.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "coin": {
+                        "type": "STRING",
+                        "description": "Cryptocurrency name (e.g. bitcoin, ethereum)"
+                    }
+                },
+                "required": [
+                    "coin"
+                ]
+            },
+            "file": "crypto_price.py"
+        },
+        {
+            "name": "discord_integration",
+            "description": "Integrates with Discord to send messages and retrieve channel information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "receiver": {
+                        "type": "string",
+                        "description": "Discord channel or user ID"
+                    },
+                    "message_text": {
+                        "type": "string",
+                        "description": "The message to send"
+                    }
+                },
+                "required": [
+                    "receiver",
+                    "message_text"
+                ]
+            },
+            "file": "discord_integration.py"
+        }
+    ]
+}
