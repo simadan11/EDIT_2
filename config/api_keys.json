@@ -1,0 +1,7 @@
+{
+    "gemini_api_key": "AQ.Ab8RN6Lj5bMpM3SYuNolrkmRTpmtp-ojn5jgXlr3OyuZAd2ugg",
+    "os_system": "windows",
+    "live_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
+    "headphones_mode": false,
+    "wake_bracket": true
+}
