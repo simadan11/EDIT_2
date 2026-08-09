@@ -6349,8 +6349,13 @@ class MainWindow(QMainWindow):
 
     def _on_setup_done(self, key: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
+        # Merge into the existing config — re-entering the key must not wipe
+        # assistant_name / live_model / pairing tokens and other settings.
+        cfg = _read_full_config()
+        cfg["gemini_api_key"] = key
+        cfg["os_system"]      = os_name
         API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
+            json.dumps(cfg, indent=4, ensure_ascii=False),
             encoding="utf-8",
         )
         self._ready = True

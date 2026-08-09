@@ -3048,6 +3048,7 @@ class JarvisLive:
 
                     print(f"[EDIT] ✅ Connected to Live API ({current_model}).")
                     save_connected_live_model(current_model)
+                    self._live_model_fails = 0      # carousel guard — reset on success
                     self.ui.set_state("LISTENING")
                     self.ui.write_log(f"SYS: EDIT online ({current_model}).")
 
@@ -3078,9 +3079,36 @@ class JarvisLive:
                 print(f"[EDIT] Error ({type(e).__name__}): {e}")
                 traceback.print_exc()
 
+                # ── Auth error FIRST ────────────────────────────────────────
+                # WS close 1008 (policy violation) is how the Live API reports
+                # an invalid/expired key. It must be caught BEFORE the model
+                # carousel below — otherwise a bad key looks like an endless
+                # "model not supported, switching…" loop that never asks the
+                # user for a new key.
+                _auth_err = "1008" in err_str or any(k in err_str for k in (
+                    "API key not valid", "API_KEY_INVALID",
+                    "invalid authentication credentials",
+                    "ACCESS_TOKEN_TYPE_UNSUPPORTED", "PERMISSION_DENIED",
+                    "UNAUTHENTICATED",
+                ))
+                if _auth_err:
+                    self.ui.write_log(
+                        "ERR: Gemini API key rejected (invalid credentials) — "
+                        "enter a new key (aistudio.google.com/apikey)."
+                    )
+                    self.ui.set_state("SLEEPING")
+                    self.ui.prompt_reconfig()
+                    while not self.ui._win._ready:
+                        await asyncio.sleep(1)
+                    print("[EDIT] New API key saved — reconnecting...")
+                    self._live_model_idx   = 0
+                    self._live_model_fails = 0
+                    _conn_backoff = 3
+                    continue
+
                 # Model compatibility error — switch to next available candidate in LIVE_MODEL_CANDIDATES
                 _model_err = any(k in err_str for k in (
-                    "1007", "1008", "not supported for bidiGenerateContent",
+                    "1007", "not supported for bidiGenerateContent",
                     "CONTENT_TYPE_AUDIO", "not found for API version", "model is not supported",
                     "not found", "INVALID_ARGUMENT", "404"
                 ))
@@ -3088,27 +3116,27 @@ class JarvisLive:
                     old_model = get_current_live_model(getattr(self, "_live_model_idx", 0))
                     self._live_model_idx = getattr(self, "_live_model_idx", 0) + 1
                     new_model = get_current_live_model(self._live_model_idx)
+                    self._live_model_fails = getattr(self, "_live_model_fails", 0) + 1
+                    if self._live_model_fails >= len(LIVE_MODEL_CANDIDATES):
+                        # Every candidate refused the channel — this is a key /
+                        # quota problem, not a model problem. Stop the carousel
+                        # and ask for a fresh key instead of spinning forever.
+                        self.ui.write_log(
+                            "ERR: No Live model accepted the connection — "
+                            "check the API key / quota, then re-enter it."
+                        )
+                        self.ui.set_state("SLEEPING")
+                        self.ui.prompt_reconfig()
+                        while not self.ui._win._ready:
+                            await asyncio.sleep(1)
+                        self._live_model_idx   = 0
+                        self._live_model_fails = 0
+                        _conn_backoff = 3
+                        continue
                     self.ui.write_log(f"SYS: Модель {old_model} отклонила Live-канал → переключение на {new_model}")
                     print(f"[EDIT] Model '{old_model}' not supported for bidiGenerateContent. Switching to '{new_model}'...")
                     _conn_backoff = 1
                     await asyncio.sleep(1)
-                    continue
-
-                # Invalid API key — stop hammering the API, prompt re-configuration
-                _auth_err = any(k in err_str for k in (
-                    "API key not valid", "API_KEY_INVALID",
-                    "invalid authentication credentials",
-                    "ACCESS_TOKEN_TYPE_UNSUPPORTED",
-                    "UNAUTHENTICATED",
-                ))
-                if _auth_err:
-                    self.ui.write_log("ERR: API key invalid — please re-enter your key.")
-                    self.ui.set_state("SLEEPING")
-                    self.ui.prompt_reconfig()
-                    while not self.ui._win._ready:
-                        await asyncio.sleep(1)
-                    print("[EDIT] New API key saved — reconnecting...")
-                    _conn_backoff = 3
                     continue
 
                 # Network / timeout errors — log clearly and back off
