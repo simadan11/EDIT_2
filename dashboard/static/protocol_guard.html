@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ПРОТОКОЛ СТРАЖ</title>
+<style>
+html, body { margin: 0; padding: 0; background: #0a0a14; color: #e0e0e0; font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden; }
+.container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; padding: 2rem; }
+h1 { font-size: 4rem; letter-spacing: 0.2em; color: #c9a227; text-shadow: 0 0 30px #c9a22766; animation: pulse 3s infinite; }
+.subtitle { font-size: 1.4rem; color: #aaa; margin-top: 1rem; }
+.status { margin-top: 2rem; font-family: monospace; color: #0f0; font-size: 1.1rem; }
+.devices { margin-top: 1.5rem; font-size: 1.2rem; color: #ddd; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ПРОТОКОЛ СТРАЖ</h1>
+  <div class="subtitle">Охранный режим активен на подключённом устройстве</div>
+  <div class="status">● СТРАЖ ОНЛАЙН</div>
+  <div class="devices" id="devList">Ожидание подключений...</div>
+</div>
+<script>
+function refresh() {
+  fetch('/devices').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('devList');
+    if (d && d.length) el.textContent = 'Подключено: ' + d.map(x=>x.name||'Unknown').join(', ');
+    else el.textContent = 'Ожидание подключений...';
+  }).catch(()=>{});
+}
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

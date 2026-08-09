@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>EDIT — Remote Assistant</title>
+  <meta name="description" content="EDIT Remote Dashboard — голосовой ассистент, режим наушников, EDITH-камера">
+  <meta name="theme-color" content="#00d4ff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EDIT">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
+  <script src="/static/crypto.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #07090f;
+      --surface: rgba(255,255,255,0.04);
+      --border:  rgba(255,255,255,0.07);
+      --accent:  #6366f1;
+      --adim:    rgba(99,102,241,0.14);
+      --text:    #dde3ed;
+      --muted:   #5e6a7e;
+      --green:   #22c55e;
+      --gdim:    rgba(34,197,94,0.14);
+    }
+    html, body {
+      height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      background: rgba(7,9,15,0.95);
+    }
+    .logo { font-size: 15px; font-weight: 700; letter-spacing: 6px; }
+    .logo em { color: var(--accent); font-style: normal; }
+    .pill {
+      display: flex; align-items: center; gap: 6px; padding: 4px 11px;
+      border-radius: 99px; background: var(--surface); border: 1px solid var(--border);
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--muted); transition: all 0.3s;
+    }
+    .pill.on { background: var(--gdim); border-color: rgba(34,197,94,0.3); color: var(--green); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+    .pill.on .dot { background: var(--green); animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .spacer { flex: 1; }
+    .enc-badge {
+      font-size: 9px; font-weight: 700; letter-spacing: 1.5px; padding: 3px 8px;
+      border-radius: 4px; display: none;
+    }
+    .enc-badge.on  { display: block; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); color: var(--green); }
+    .enc-badge.off { display: block; background: rgba(255,100,100,0.08); border: 1px solid rgba(255,100,100,0.2); color: #f87171; }
+    .url { font-size: 10px; font-family: monospace; color: var(--muted); padding: 4px 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+    #spk-btn, #dev-btn, #holo-btn, #hp-btn {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      padding: 4px 9px; font-size: 13px; border-radius: 6px; cursor: pointer; line-height: 1.25;
+    }
+    #spk-btn:active, #dev-btn:active, #holo-btn:active, #hp-btn:active, #install-btn:active { transform: scale(0.95); }
+    #spk-btn.muted  { opacity: 0.45; }
+    #hp-btn { color: #c4b5fd; border-color: rgba(167,139,250,0.35); }
+    #hp-btn:hover { background: rgba(167,139,250,0.14); border-color: #a78bfa; }
+    #hp-btn.on  { color: #4ade80; border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.08); }
+    #install-btn { color: #86efac; border-color: rgba(34,197,94,0.4); font-size: 15px; padding: 2px 10px; }
+    #install-btn:hover { background: rgba(34,197,94,0.14); border-color: #22c55e; }
+    #dev-btn #dev-count { font-size: 10px; font-weight: 700; color: var(--green); }
+    #holo-btn { color: #67e8f9; border-color: rgba(34,211,238,0.3); }
+    #holo-btn:hover { background: rgba(34,211,238,0.12); border-color: #22d3ee; }
+
+    /* ── DEVICES HUB PANEL ── */
+    #dev-panel {
+      position: fixed; top: 54px; right: 10px; z-index: 220;
+      width: min(310px, 88vw); display: none;
+      background: rgba(7,10,16,0.97); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+    #dev-panel.open { display: block; animation: pop 0.18s ease; }
+    .dp-title { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: var(--accent); margin-bottom: 8px; }
+    .dp-empty { font-size: 11px; color: var(--muted); padding: 6px 0; }
+    .dp-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      margin-bottom: 6px; font-size: 11px;
+    }
+    .dp-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dp-meta b { color: var(--text); font-weight: 700; }
+    .dp-meta i { color: var(--muted); font-style: normal; font-size: 10px; }
+    .dp-kick {
+      flex-shrink: 0; background: transparent; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 5px;
+      font-size: 9px; font-weight: 800; letter-spacing: 1px;
+      padding: 3px 8px; cursor: pointer; font-family: inherit;
+    }
+    .dp-kick:hover { color: #f87171; border-color: #7f2d2d; }
+    .dp-paired {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 10px; color: var(--muted); margin-top: 4px;
+    }
+    #dp-revoke {
+      background: transparent; color: #f87171; border: 1px solid #7f2d2d;
+      border-radius: 5px; font-size: 9px; font-weight: 800; letter-spacing: 1px;
+      padding: 4px 8px; cursor: pointer; font-family: inherit; opacity: 0.85;
+    }
+    #dp-revoke:hover { opacity: 1; }
+
+    /* ── FEED ── */
+    main { flex: 1; overflow-y: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 10px; }
+    main::-webkit-scrollbar { width: 3px; }
+    main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; animation: pop 0.18s ease; }
+    @keyframes pop { from { opacity:0; transform:translateY(4px); } }
+    .msg-j   { align-self:flex-start; background:var(--adim);   border:1px solid rgba(99,102,241,0.18); border-bottom-left-radius:4px; }
+    .msg-u   { align-self:flex-end;   background:var(--surface); border:1px solid var(--border);        border-bottom-right-radius:4px; }
+    .msg-sys { align-self:center; font-size:11px; color:var(--muted); padding:2px 0; background:transparent; border:none; letter-spacing:0.3px; }
+    .lbl { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; opacity:0.45; margin-bottom:4px; }
+    .msg-j .lbl { color:var(--accent); }
+    .msg-u .lbl { color:var(--muted); text-align:right; }
+
+    /* ── FILE CARD ── */
+    .msg-file {
+      align-self: flex-end;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; border-bottom-right-radius: 4px;
+      padding: 11px 14px; display: flex; align-items: center; gap: 12px;
+      max-width: 82%; animation: pop 0.18s ease;
+    }
+    .fc-icon { font-size: 26px; flex-shrink: 0; }
+    .fc-meta { flex: 1; min-width: 0; }
+    .fc-lbl  { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; opacity:0.45; color:var(--muted); margin-bottom:4px; }
+    .fc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fc-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .fc-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-top: 7px; overflow: hidden; }
+    .fc-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 0.12s linear; }
+    .fc-status { font-size: 10px; font-weight: 700; letter-spacing: 1px; flex-shrink: 0; color: var(--muted); }
+    .fc-status.done { color: var(--green); }
+    .fc-status.err  { color: #f87171; }
+    .fc-dl { display:block; margin-top:6px; font-size:11px; color:var(--accent); text-decoration:none; font-weight:600; }
+    .fc-dl:hover { opacity: 0.8; }
+
+    /* ── FOOTER ── */
+    footer { flex-shrink:0; padding:10px 14px; border-top:1px solid var(--border); background:rgba(7,9,15,0.95); display:flex; gap:8px; align-items:center; }
+    #inp { flex:1; padding:11px 14px; background:var(--surface); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-size:14px; outline:none; transition:border-color 0.15s; }
+    #inp:focus { border-color: var(--accent); }
+    #inp::placeholder { color: var(--muted); }
+    .btn { padding:11px 15px; border:none; border-radius:12px; font-size:11px; font-weight:700; letter-spacing:1.5px; cursor:pointer; transition:opacity 0.15s,transform 0.1s; }
+    .btn:active { transform: scale(0.96); }
+    .btn:hover  { opacity: 0.82; }
+    .btn-send { background: var(--accent); color: #fff; }
+    .btn-wake { background:var(--surface); border:1px solid var(--border); color:var(--muted); display:none; }
+    .btn-wake.show { display:block; color:var(--green); border-color:rgba(34,197,94,0.35); }
+    .btn-attach {
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+      padding: 11px 13px; font-size: 16px; line-height: 1; border-radius: 12px;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .btn-attach:hover  { opacity: 0.82; border-color: var(--accent); color: var(--accent); }
+    .btn-attach:active { transform: scale(0.96); }
+
+    /* ── MIC BUTTON ── */
+    #mic-btn {
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+      padding: 11px 13px; font-size: 16px; line-height: 1; border-radius: 12px;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s, background 0.2s, border-color 0.2s;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    #mic-btn:hover  { opacity: 0.82; border-color: var(--accent); color: var(--accent); }
+    #mic-btn:active { transform: scale(0.96); }
+    #mic-btn.recording {
+      background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.45); color: #ef4444;
+      animation: mic-pulse 1s ease-in-out infinite;
+    }
+    #mic-btn.unsupported { opacity: 0.3; cursor: not-allowed; }
+    @keyframes mic-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.65;transform:scale(0.97)} }
+
+    /* ── CAM BUTTON ── */
+    #cam-btn {
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+      padding: 11px 13px; font-size: 16px; line-height: 1; border-radius: 12px;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s, border-color 0.2s;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    #cam-btn:hover  { opacity: 0.82; border-color: #22d3ee; color: #22d3ee; }
+    #cam-btn:active { transform: scale(0.96); }
+
+    /* ── EDITH CAMERA OVERLAY ── */
+    #cam-overlay {
+      position: fixed; inset: 0; z-index: 100; background: #000;
+      display: none; overflow: hidden;
+      font-family: 'SFMono-Regular', Consolas, 'Roboto Mono', monospace;
+    }
+    #cam-overlay.open { display: block; }
+    #cam-video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; filter: saturate(0.85) contrast(1.08);
+    }
+    #cam-boxes { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    .tag {
+      position: absolute; border: 1.5px solid #22d3ee; border-radius: 3px;
+      box-shadow: 0 0 12px rgba(34,211,238,0.25); animation: tag-pop .25s ease;
+      pointer-events: auto;
+    }
+    .tag-info { cursor: pointer; }
+    .tag-info:hover { box-shadow: 0 0 18px rgba(34,211,238,0.6); }
+    .tag-info:active { transform: scale(0.98); }
+    @keyframes tag-pop { from { opacity: 0; transform: scale(1.15); } }
+    .tag-p { border-color: #f97316; box-shadow: 0 0 12px rgba(249,115,22,0.35); }
+    .tag-f { border-color: #00d4ff; box-shadow: 0 0 14px rgba(0,212,255,0.45); }
+    .tag-f .tag-l { background: #00d4ff; }
+    .tag-fk { border-color: #00ffa8; box-shadow: 0 0 16px rgba(0,255,168,0.55); }
+    .tag-fk .tag-l { background: #00ffa8; }
+    .tag-fk .tag-d { color: #7dffd0; }
+    .tag-v { border-color: #facc15; box-shadow: 0 0 12px rgba(250,204,21,0.35); }
+    .tag-v .tag-l { background: #facc15; }
+    .tag-v .tag-d { color: #fde68a; }
+    .tag-l {
+      position: absolute; top: -1.5px; left: -1.5px; transform: translateY(-100%);
+      font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #04070c;
+      background: #22d3ee; padding: 2px 7px; border-radius: 2px 2px 0 0;
+      white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tag-p .tag-l { background: #f97316; }
+    .tag-d {
+      position: absolute; bottom: -1.5px; left: -1.5px; transform: translateY(100%);
+      font-size: 9px; letter-spacing: 0.5px; color: #67e8f9; white-space: nowrap;
+      text-shadow: 0 1px 3px #000;
+    }
+    .tag-p .tag-d { color: #fdba74; }
+    /* ── EDITH person effect: silhouette aura + bone rig ──────────────── */
+    #cam-fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    #cam-fx svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .fx-aura {
+      fill: rgba(255,165,0,0.13); stroke: #ffa500; stroke-width: 2.5;
+      stroke-linejoin: round; stroke-linecap: round;
+      filter: drop-shadow(0 0 6px rgba(255,165,0,0.95))
+              drop-shadow(0 0 16px rgba(255,140,0,0.55));
+      animation: fx-breathe 1.6s ease-in-out infinite;
+    }
+    .fx-aura-glow {
+      fill: none; stroke: #ff8c00; stroke-width: 9; stroke-linejoin: round;
+      opacity: 0.28; filter: blur(4px);
+      animation: fx-breathe 1.6s ease-in-out infinite;
+    }
+    .fx-mesh {
+      fill: none; stroke: #00d4ff; stroke-width: 0.6; opacity: 0.55;
+      filter: drop-shadow(0 0 2px rgba(0,212,255,0.8));
+      animation: fx-breathe 1.6s ease-in-out infinite;
+    }
+    .fx-mesh-k { stroke: #00ffa8; filter: drop-shadow(0 0 2px rgba(0,255,168,0.8)); }
+    .fx-node { fill: #ffffff; opacity: 0.85; }
+    .fx-bone {
+      stroke: #ff2d3d; stroke-width: 2.4; stroke-linecap: round; fill: none;
+      filter: drop-shadow(0 0 4px rgba(255,45,61,0.9));
+    }
+    .fx-joint { fill: #fff0f0; stroke: #ff2d3d; stroke-width: 1.4; }
+    .fx-sweep {
+      stroke: #fff2cc; stroke-width: 2; opacity: 0.85;
+      filter: drop-shadow(0 0 6px rgba(255,220,150,0.9));
+      animation: fx-sweep 2.2s linear infinite;
+    }
+    @keyframes fx-breathe { 0%,100% { opacity: 0.75; } 50% { opacity: 1; } }
+    @keyframes fx-sweep   { 0% { transform: translateY(0); } 100% { transform: translateY(var(--fxh, 100px)); } }
+    @keyframes fx-in      { from { opacity: 0; } to { opacity: 1; } }
+    .fx-g { animation: fx-in .3s ease; }
+
+    .cam-scanline {
+      position: absolute; left: 0; right: 0; height: 90px; pointer-events: none;
+      background: linear-gradient(to bottom, transparent, rgba(34,211,238,0.10), transparent);
+      animation: scan-move 4.5s linear infinite;
+    }
+    @keyframes scan-move { 0% { top: -15%; } 100% { top: 110%; } }
+    .cf { position: absolute; width: 34px; height: 34px; border: 2px solid rgba(34,211,238,0.85); pointer-events: none; }
+    .cf-tl { top: 14px;    left: 14px;  border-right: none; border-bottom: none; }
+    .cf-tr { top: 14px;    right: 14px; border-left: none;  border-bottom: none; }
+    .cf-bl { bottom: 92px; left: 14px;  border-right: none; border-top: none; }
+    .cf-br { bottom: 92px; right: 14px; border-left: none;  border-top: none; }
+    .cam-top {
+      position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center;
+      gap: 10px; padding: 24px 22px 14px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent);
+    }
+    .cam-title { font-size: 12px; font-weight: 700; letter-spacing: 3px; color: #22d3ee; }
+    .cam-title em { font-style: normal; color: rgba(221,227,237,0.5); letter-spacing: 1.5px; font-size: 10px; }
+    .cam-targets { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #f97316; }
+    .cam-x {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      color: #dde3ed; width: 34px; height: 34px; border-radius: 50%;
+      font-size: 14px; cursor: pointer; flex-shrink: 0;
+    }
+    .cam-status {
+      position: absolute; left: 20px; bottom: 82px; font-size: 10px; font-weight: 700;
+      letter-spacing: 2px; color: #22d3ee; text-shadow: 0 1px 3px #000; pointer-events: none;
+    }
+    #cam-log {
+      position: absolute; left: 12px; right: 12px; bottom: 112px; display: flex;
+      flex-direction: column; gap: 4px; pointer-events: none;
+    }
+    .cam-log-line {
+      align-self: flex-start; max-width: 88%; font-size: 11px; line-height: 1.5;
+      padding: 6px 10px; border-radius: 8px; background: rgba(4,8,14,0.72);
+      border-left: 2px solid #22d3ee; color: #cfdae8; animation: pop 0.18s ease;
+    }
+    .cam-log-line.ul { border-left-color: #6366f1; }
+    .cam-controls {
+      position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 8px;
+      padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    }
+    #cam-q {
+      flex: 1; padding: 12px 14px; background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(34,211,238,0.35); border-radius: 10px; color: #dde3ed;
+      font-size: 13px; font-family: inherit; outline: none;
+    }
+    #cam-q::placeholder { color: rgba(221,227,237,0.35); }
+    #cam-scan {
+      padding: 0 22px; background: #22d3ee; border: none; border-radius: 10px;
+      color: #04070c; font-size: 13px; font-weight: 800; letter-spacing: 2px;
+      cursor: pointer; font-family: inherit;
+    }
+    #cam-scan:active { transform: scale(0.96); }
+    #cam-live {
+      padding: 0 14px; background: transparent; border: 1px solid rgba(34,211,238,0.5);
+      border-radius: 10px; color: #22d3ee; font-size: 12px; font-weight: 800;
+      letter-spacing: 1.5px; cursor: pointer; font-family: inherit;
+    }
+    #cam-live:active { transform: scale(0.96); }
+    #cam-live.on {
+      background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.55);
+      color: #ef4444; animation: mic-pulse 1s ease-in-out infinite;
+    }
+    #cam-flip {
+      padding: 0 14px; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+      color: #dde3ed; font-size: 16px; cursor: pointer;
+    }
+
+    /* ── HOLO LAB / wearable prototype studio ───────────────────────────── */
+    #holo-overlay {
+      position: fixed; inset: 0; z-index: 260; display: none; overflow: hidden;
+      color: #dffcff; background: #02070d;
+      font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+    }
+    #holo-overlay.open { display: flex; animation: holo-in .22s ease; }
+    @keyframes holo-in { from { opacity: 0; } to { opacity: 1; } }
+    .holo-shell { width: 100%; height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+    .holo-head {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      border-bottom: 1px solid rgba(34,211,238,0.24);
+      background: linear-gradient(90deg, rgba(4,22,33,0.98), rgba(2,8,14,0.94));
+      box-shadow: 0 0 26px rgba(0,212,255,0.08);
+    }
+    .holo-brand { color: #22d3ee; font-weight: 800; letter-spacing: 3px; font-size: 13px; }
+    .holo-brand em { color: #94a3b8; font-style: normal; font-size: 10px; letter-spacing: 1px; }
+    .holo-project-chip {
+      color: #67e8f9; border: 1px solid rgba(34,211,238,0.25); border-radius: 99px;
+      padding: 4px 10px; font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase;
+    }
+    .holo-spacer { flex: 1; }
+    .holo-close {
+      width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+      border: 1px solid rgba(148,163,184,0.25); background: rgba(255,255,255,0.05);
+      color: #cbd5e1; font-size: 15px;
+    }
+    .holo-close:hover { border-color: #22d3ee; color: #22d3ee; }
+    .holo-body {
+      min-height: 0; display: grid; grid-template-columns: 220px minmax(0,1fr) 230px; gap: 10px;
+      padding: 10px; background:
+        radial-gradient(circle at 50% 40%, rgba(0,150,190,0.08), transparent 48%), #02070d;
+    }
+    .holo-side {
+      min-height: 0; overflow-y: auto; padding: 10px; border: 1px solid rgba(34,211,238,0.17);
+      background: rgba(3,16,25,0.82); border-radius: 10px; box-shadow: inset 0 0 22px rgba(0,212,255,0.025);
+    }
+    .holo-side::-webkit-scrollbar { width: 3px; }
+    .holo-side::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.28); }
+    .holo-section-title {
+      color: #5eead4; font-size: 9px; font-weight: 800; letter-spacing: 1.8px;
+      text-transform: uppercase; padding-bottom: 7px; margin-bottom: 8px;
+      border-bottom: 1px solid rgba(34,211,238,0.18);
+    }
+    .holo-select, .holo-input, .holo-notes {
+      width: 100%; color: #dffcff; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(34,211,238,0.24); border-radius: 6px; outline: none;
+      font: inherit; font-size: 11px; padding: 9px 8px; margin-bottom: 8px;
+    }
+    .holo-select:focus, .holo-input:focus, .holo-notes:focus { border-color: #22d3ee; }
+    .holo-select option { color: #0f172a; }
+    .holo-notes { resize: vertical; min-height: 76px; line-height: 1.45; }
+    .holo-label { display: block; color: #7398a7; font-size: 8px; letter-spacing: 1px; margin: 8px 0 5px; }
+    .holo-btn {
+      width: 100%; min-height: 30px; margin-bottom: 7px; padding: 7px 8px; cursor: pointer;
+      border-radius: 6px; border: 1px solid rgba(34,211,238,0.28); background: rgba(0,150,190,0.07);
+      color: #9debf4; font: inherit; font-size: 9px; font-weight: 800; letter-spacing: 1px;
+      text-align: left; transition: background .15s, border-color .15s, color .15s, transform .1s;
+    }
+    .holo-btn:hover { background: rgba(34,211,238,0.15); border-color: #22d3ee; color: #fff; }
+    .holo-btn:active { transform: scale(.98); }
+    .holo-btn.primary { background: #22d3ee; color: #031019; border-color: #67e8f9; text-align: center; }
+    .holo-btn.primary:hover { background: #67e8f9; }
+    .holo-btn.active { background: rgba(45,212,191,0.18); border-color: #2dd4bf; color: #99f6e4; }
+    .holo-button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .holo-button-row .holo-btn { text-align: center; font-size: 8px; padding-left: 3px; padding-right: 3px; }
+    .holo-range { width: 100%; accent-color: #22d3ee; margin: 4px 0 2px; }
+    .holo-range-value { color: #67e8f9; font-size: 10px; float: right; }
+    .holo-hint { color: #547481; font-size: 9px; line-height: 1.5; margin: 9px 0 2px; }
+    .holo-stage {
+      position: relative; min-width: 0; min-height: 300px; overflow: hidden; border-radius: 10px;
+      border: 1px solid rgba(34,211,238,0.25);
+      background: radial-gradient(ellipse at 50% 47%, rgba(0,160,200,0.14), transparent 42%), #010910;
+      perspective: 950px; isolation: isolate;
+    }
+    .holo-stage::before {
+      content: ''; position: absolute; inset: -30%; opacity: .33; pointer-events: none;
+      background-image: linear-gradient(rgba(34,211,238,.14) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,.14) 1px, transparent 1px);
+      background-size: 38px 38px; transform: perspective(350px) rotateX(62deg) translateY(36%); transform-origin: center bottom;
+    }
+    .holo-stage::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 8;
+      background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(34,211,238,.025) 6px 7px);
+      mix-blend-mode: screen;
+    }
+    .holo-stage.mode-wireframe { background-color: #01080d; }
+    .holo-stage.mode-wireframe .h-part { fill: transparent !important; opacity: .92; }
+    .holo-stage.mode-wireframe .h-glass { fill: rgba(0,212,255,.035) !important; }
+    .holo-stage.mode-clear { background: radial-gradient(ellipse at 50% 47%, rgba(45,212,191,.18), transparent 45%), #02100f; }
+    .holo-stage.mode-clear .h-part { filter: drop-shadow(0 0 10px rgba(94,234,212,.8)); }
+    .holo-stage.mode-exploded .h-camera { transform: translate(34px,-26px); }
+    .holo-stage.mode-exploded .h-display { transform: translate(-28px,-18px); }
+    .holo-stage.mode-exploded .h-core { transform: translate(0,20px); }
+    .holo-stage.mode-exploded .h-sensor { transform: translate(30px,22px); }
+    .holo-axis { position: absolute; left: 50%; top: 50%; width: 46%; height: 1px; background: rgba(34,211,238,.25); z-index: 1; }
+    .holo-axis::after { content: ''; position: absolute; left: 50%; top: -23px; width: 1px; height: 46px; background: rgba(34,211,238,.25); }
+    .holo-ring { position: absolute; left: 50%; top: 50%; border: 1px solid rgba(34,211,238,.33); border-radius: 50%; transform: translate(-50%,-50%) rotateX(66deg); pointer-events: none; z-index: 1; }
+    .holo-ring.r1 { width: 54%; height: 54%; animation: holo-spin 14s linear infinite; }
+    .holo-ring.r2 { width: 35%; height: 35%; border-style: dashed; animation: holo-spin 9s linear infinite reverse; }
+    @keyframes holo-spin { to { transform: translate(-50%,-50%) rotateX(66deg) rotateZ(360deg); } }
+    .holo-model {
+      position: absolute; z-index: 3; left: 50%; top: 49%; width: min(72%, 600px); height: min(72%, 460px);
+      transform: translate(-50%,-50%) rotateX(5deg) rotateY(-8deg); transform-style: preserve-3d;
+      animation: holo-float 5s ease-in-out infinite; transition: filter .25s, opacity .25s;
+    }
+    @keyframes holo-float { 0%,100% { transform: translate(-50%,-50%) rotateX(5deg) rotateY(-8deg) translateY(0); } 50% { transform: translate(-50%,-50%) rotateX(5deg) rotateY(8deg) translateY(-7px); } }
+    .holo-model.is-clear { filter: contrast(1.35) saturate(1.25) brightness(1.18); }
+    .holo-svg { width: 100%; height: 100%; overflow: visible; }
+    .h-part { transform-box: fill-box; transform-origin: center; transition: transform .35s ease, opacity .25s, fill .25s; }
+    .h-frame { fill: rgba(26,211,238,.12); stroke: #67e8f9; stroke-width: 2.4; }
+    .h-glass { fill: rgba(0,212,255,.15); stroke: #a5f3fc; stroke-width: 2; }
+    .h-metal { fill: rgba(45,212,191,.18); stroke: #2dd4bf; stroke-width: 2.2; }
+    .h-display { fill: rgba(129,140,248,.2); stroke: #a5b4fc; stroke-width: 2; }
+    .h-camera { fill: #fb923c; stroke: #fed7aa; stroke-width: 2; }
+    .h-sensor { fill: #facc15; stroke: #fef08a; stroke-width: 1.8; }
+    .h-core { fill: rgba(34,211,238,.2); stroke: #22d3ee; stroke-width: 2.6; }
+    .h-beam { fill: none; stroke: #e0f2fe; stroke-width: 2; stroke-dasharray: 8 7; animation: holo-beam 1.3s linear infinite; opacity: .85; }
+    @keyframes holo-beam { to { stroke-dashoffset: -30; } }
+    .h-caption { fill: #dffcff; font: 700 13px 'Courier New', monospace; letter-spacing: 2px; }
+    .h-subcaption { fill: #67e8f9; font: 10px 'Courier New', monospace; letter-spacing: 1px; }
+    .holo-cam-wrap {
+      position: absolute; z-index: 6; right: 14px; top: 14px; width: 210px; height: 148px; display: none;
+      overflow: hidden; border: 1px solid rgba(34,211,238,.55); border-radius: 7px; background: #000;
+      box-shadow: 0 0 20px rgba(0,212,255,.15);
+    }
+    .holo-cam-wrap.on { display: block; }
+    #holo-cam-video { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .holo-cam-meta { position: absolute; left: 7px; top: 6px; color: #67e8f9; font-size: 8px; letter-spacing: 1px; text-shadow: 0 1px 3px #000; }
+    .holo-cam-boxes { position: absolute; inset: 0; pointer-events: none; }
+    .holo-detection { position: absolute; border: 1px solid #22d3ee; box-shadow: 0 0 6px rgba(34,211,238,.7); }
+    .holo-detection.person { border-color: #fb923c; box-shadow: 0 0 6px rgba(251,146,60,.7); }
+    .holo-detection.vehicle { border-color: #facc15; box-shadow: 0 0 6px rgba(250,204,21,.7); }
+    .holo-detection span { position: absolute; left: -1px; top: -17px; white-space: nowrap; padding: 2px 4px; background: #22d3ee; color: #031019; font-size: 7px; font-weight: 800; }
+    .holo-detection.person span { background: #fb923c; }
+    .holo-detection.vehicle span { background: #facc15; }
+    .holo-callouts { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+    .holo-callout { position: absolute; max-width: 155px; color: #bffaff; font-size: 8px; line-height: 1.35; letter-spacing: .6px; text-shadow: 0 0 7px #00d4ff; }
+    .holo-callout::before { content: ''; display: block; width: 30px; border-top: 1px solid #22d3ee; margin-bottom: 4px; }
+    .holo-callout b { display: block; color: #fff; font-size: 9px; letter-spacing: 1.2px; }
+    .holo-callout i { color: #67e8f9; font-style: normal; opacity: .78; }
+    .holo-crosshair { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%,-50%); z-index: 5; opacity: .75; }
+    .holo-crosshair::before, .holo-crosshair::after { content: ''; position: absolute; background: #dffcff; }
+    .holo-crosshair::before { left: 7px; top: 0; width: 1px; height: 16px; }
+    .holo-crosshair::after { left: 0; top: 7px; width: 16px; height: 1px; }
+    .holo-stage-status { position: absolute; left: 14px; bottom: 12px; z-index: 9; color: #67e8f9; font-size: 9px; letter-spacing: 1.2px; text-shadow: 0 0 6px #00d4ff; }
+    .holo-parts { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .holo-parts li { padding: 7px 8px; border-left: 2px solid #22d3ee; background: rgba(34,211,238,.06); color: #b9dbe2; font-size: 9px; line-height: 1.4; }
+    .holo-parts li b { display: block; color: #67e8f9; font-size: 9px; letter-spacing: 1px; }
+    .holo-parts li span { color: #718d96; }
+    .holo-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
+    .holo-readout div { padding: 7px; border: 1px solid rgba(34,211,238,.15); background: rgba(0,0,0,.2); }
+    .holo-readout small { display: block; color: #547481; font-size: 7px; letter-spacing: 1px; }
+    .holo-readout strong { display: block; color: #99f6e4; font-size: 11px; margin-top: 3px; }
+    .holo-foot { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-top: 1px solid rgba(34,211,238,.2); background: rgba(2,10,16,.96); }
+    .holo-foot-status { color: #5eead4; font-size: 9px; letter-spacing: 1.3px; }
+    .holo-foot-note { color: #547481; font-size: 8px; }
+    @media (max-width: 850px) {
+      .holo-body { grid-template-columns: 170px minmax(0,1fr); }
+      .holo-side.right { display: none; }
+      .holo-cam-wrap { width: 160px; height: 112px; }
+      .holo-callout { max-width: 110px; font-size: 7px; }
+    }
+    @media (max-width: 600px) {
+      .holo-head { padding: 10px; gap: 7px; }
+      .holo-brand { font-size: 10px; letter-spacing: 1.7px; }
+      .holo-brand em { display: none; }
+      .holo-project-chip { font-size: 7px; padding: 3px 6px; }
+      .holo-body { display: flex; flex-direction: column; padding: 6px; overflow-y: auto; }
+      .holo-side.left { order: 2; max-height: 230px; }
+      .holo-stage { order: 1; flex: 0 0 55vh; min-height: 330px; }
+      .holo-side.right { display: block; order: 3; max-height: 190px; }
+      .holo-cam-wrap { right: 8px; top: 8px; width: 145px; height: 100px; }
+      .holo-model { width: 91%; height: 64%; }
+      .holo-callout { max-width: 90px; font-size: 6px; }
+      .holo-callout b { font-size: 7px; }
+      .holo-foot { flex-wrap: wrap; gap: 6px; padding: 7px 10px; }
+      .holo-foot-note { width: 100%; }
+    }
+
+    /* ── TOAST ── */
+    #toast {
+      position:fixed; top:66px; left:50%; transform:translateX(-50%) translateY(-8px);
+      z-index: 300;
+      background:rgba(34,197,94,0.16); border:1px solid rgba(34,197,94,0.4);
+      color:var(--green); font-size:12px; font-weight:700; letter-spacing:1px;
+      padding:7px 18px; border-radius:99px;
+      opacity:0; transition:opacity 0.22s,transform 0.22s;
+      pointer-events:none; white-space:nowrap;
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+  <div id="toast"></div>
+  <header>
+    <div class="logo"><em>J</em>ARVIS</div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="st">Connecting</span></div>
+    <div class="enc-badge" id="enc">AES-256</div>
+    <div class="spacer"></div>
+    <button id="holo-btn" onclick="openHoloLab()" title="Holo Lab — wearable prototype studio">◈ HOLO</button>
+    <button id="dev-btn" onclick="toggleDevPanel()" title="Connected devices hub">🛰 <span id="dev-count">0</span></button>
+    <button id="hp-btn" onclick="toggleHeadphones()" title="Headphones mode — Bluetooth headphones connected to THIS phone; the headphone button = 'EDIT, listen now'">🎧</button>
+    <button id="install-btn" onclick="installApp()" title="Установить EDIT на телефон как приложение" style="display:none">⤓</button>
+    <button id="spk-btn" onclick="toggleSpk()" title="JARVIS voice on this device">🔊</button>
+    <div class="url">__IP__:__PORT__</div>
+  </header>
+  <!-- ── Devices hub panel ───────────────────────────────────────────── -->
+  <div id="dev-panel">
+    <div class="dp-title">◈ DEVICES HUB</div>
+    <div id="dev-list"><div class="dp-empty">loading…</div></div>
+    <div class="dp-paired">paired devices: <span id="dp-paired-n">0</span>
+      <button id="dp-revoke" onclick="revokePaired()">REVOKE ALL</button>
+    </div>
+  </div>
+  <main id="feed"></main>
+  <footer>
+    <input id="inp" placeholder="Send a command to JARVIS…" autocomplete="off">
+    <label class="btn-attach" for="file-inp" title="Send file">📎</label>
+    <input type="file" id="file-inp" multiple accept="*/*" style="display:none">
+    <button id="cam-btn" onclick="openCamera()" title="Phone camera — EDITH vision">📷</button>
+    <button id="mic-btn" onclick="doMic()" title="Voice command">🎤</button>
+    <button class="btn btn-wake" id="wake" onclick="doWake()">WAKE</button>
+    <button class="btn btn-send" onclick="doSend()">SEND</button>
+  </footer>
+
+  <!-- ── EDITH camera overlay ─────────────────────────────────────────── -->
+  <div id="cam-overlay">
+    <video id="cam-video" autoplay playsinline muted></video>
+    <div id="cam-fx"></div>
+    <div id="cam-boxes"></div>
+    <div class="cam-scanline"></div>
+    <span class="cf cf-tl"></span><span class="cf cf-tr"></span>
+    <span class="cf cf-bl"></span><span class="cf cf-br"></span>
+    <div class="cam-top">
+      <span class="cam-title">E.D.I.T.H <em>// PHONE OPTICS</em></span>
+      <span class="cam-targets" id="cam-targets">NO TARGETS</span>
+      <button class="cam-x" onclick="closeCamera()" title="Close">✕</button>
+    </div>
+    <div id="cam-log"></div>
+    <div class="cam-status" id="cam-status">INITIALIZING…</div>
+    <div class="cam-controls">
+      <input id="cam-q" placeholder="Ask about what you see… (optional)" autocomplete="off">
+      <button id="cam-live" onclick="toggleLive()" title="Stream camera to PC">LIVE</button>
+      <button id="cam-scan" onclick="doScan()">SCAN</button>
+      <button id="cam-flip" onclick="flipCamera()" title="Flip camera">🔄</button>
+    </div>
+  </div>
+
+  <!-- ── HOLO LAB: visual wearable prototyping + camera HUD ─────────────── -->
+  <div id="holo-overlay" aria-label="Holo Lab wearable prototype studio">
+    <div class="holo-shell">
+      <div class="holo-head">
+        <div class="holo-brand">◈ HOLO LAB <em>// WEARABLE PROTOTYPE STUDIO</em></div>
+        <div class="holo-project-chip" id="holo-project-chip">UNSAVED DESIGN</div>
+        <div class="holo-spacer"></div>
+        <button class="holo-close" onclick="closeHoloLab()" title="Close Holo Lab">✕</button>
+      </div>
+      <div class="holo-body">
+        <aside class="holo-side left">
+          <div class="holo-section-title">01 / CREATE CONCEPT</div>
+          <label class="holo-label" for="holo-model-select">PROTOTYPE CLASS</label>
+          <select class="holo-select" id="holo-model-select" onchange="renderHoloModel()">
+            <option value="glasses">SMART OPTICS / glasses + camera</option>
+            <option value="glove">AR GLOVE / gesture interface</option>
+            <option value="suit">FIELD SUIT / sensor core</option>
+            <option value="custom">CUSTOM / any object or scene</option>
+          </select>
+          <label class="holo-label" for="holo-subject">ANY SUBJECT / OBJECT</label>
+          <input class="holo-input" id="holo-subject" maxlength="120" placeholder="robot, car, house, planet, anything…">
+          <label class="holo-label" for="holo-project-name">PROJECT NAME</label>
+          <input class="holo-input" id="holo-project-name" maxlength="64" placeholder="e.g. ARA-01 optics">
+          <label class="holo-label" for="holo-notes">BUILD NOTES</label>
+          <textarea class="holo-notes" id="holo-notes" maxlength="600" placeholder="What should this prototype help you see or measure?"></textarea>
+          <button class="holo-btn primary" onclick="createHoloProject()">▸ CREATE HOLOGRAM</button>
+          <button class="holo-btn" onclick="askJarvisHoloDesign()">✦ ASK JARVIS TO DESIGN ANYTHING</button>
+          <p class="holo-hint">Creates a clear, animated concept view and a session project ID. It is a visual prototype — not a physical hologram or a hardware controller.</p>
+
+          <div class="holo-section-title" style="margin-top:16px">02 / DISPLAY MODE</div>
+          <div class="holo-button-row">
+            <button class="holo-btn active" data-holo-mode="holo" onclick="setHoloMode('holo', this)">HOLO</button>
+            <button class="holo-btn" data-holo-mode="wireframe" onclick="setHoloMode('wireframe', this)">WIREFRAME</button>
+            <button class="holo-btn" data-holo-mode="exploded" onclick="setHoloMode('exploded', this)">EXPLODED</button>
+            <button class="holo-btn" data-holo-mode="clear" onclick="setHoloMode('clear', this)">CLEAR VIEW</button>
+          </div>
+          <label class="holo-label" for="holo-clarity">CLARITY / CONTRAST <span class="holo-range-value" id="holo-clarity-value">85%</span></label>
+          <input class="holo-range" id="holo-clarity" type="range" min="35" max="100" value="85" oninput="setHoloClarity(this.value)">
+        </aside>
+
+        <section class="holo-stage mode-holo" id="holo-stage">
+          <div class="holo-axis"></div><div class="holo-ring r1"></div><div class="holo-ring r2"></div>
+          <div class="holo-crosshair"></div>
+          <div class="holo-cam-wrap" id="holo-cam-wrap">
+            <video id="holo-cam-video" autoplay playsinline muted></video>
+            <div class="holo-cam-meta">◉ OPTICS TEST FEED</div>
+            <div class="holo-cam-boxes" id="holo-cam-boxes"></div>
+          </div>
+          <div class="holo-model" id="holo-model"></div>
+          <div class="holo-callouts" id="holo-callouts"></div>
+          <div class="holo-stage-status" id="holo-stage-status">HOLO READY / SELECT A PROTOTYPE</div>
+        </section>
+
+        <aside class="holo-side right">
+          <div class="holo-section-title">03 / LIVE OPTICS</div>
+          <button class="holo-btn" id="holo-camera-toggle" onclick="toggleHoloCamera()">◉ START CAMERA FEED</button>
+          <button class="holo-btn" id="holo-scan-btn" onclick="holoScanSpace()">⌁ SCAN SPACE</button>
+          <button class="holo-btn" onclick="holoAskJarvis()">✦ ASK JARVIS ABOUT VIEW</button>
+          <button class="holo-btn" onclick="printHoloBlueprint()">⎙ PRINT BLUEPRINT</button>
+          <button class="holo-btn" onclick="openHoloParts()">▣ OPEN FULL PARTS CATALOG</button>
+          <p class="holo-hint">The camera stays on this device. SCAN SPACE uses the existing EDITH vision endpoint to place labels on the test feed.</p>
+
+          <div class="holo-section-title" style="margin-top:16px">04 / COMPONENTS</div>
+          <ul class="holo-parts" id="holo-parts"></ul>
+          <div class="holo-readout">
+            <div><small>MODE</small><strong id="holo-readout-mode">HOLO</strong></div>
+            <div><small>STATUS</small><strong id="holo-readout-status">READY</strong></div>
+          </div>
+        </aside>
+      </div>
+      <div class="holo-foot">
+        <span class="holo-foot-status" id="holo-foot-status">SAFE PROTOTYPE MODE</span>
+        <span class="holo-foot-note">No physical device is activated. Use the visual plan to discuss parts, fit, power and safety before building.</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Auth — bearer token ───────────────────────────────────────────────────
+    const _authToken  = sessionStorage.getItem('jarvis_token');
+    const _sessionKey = sessionStorage.getItem('jarvis_key');
+
+    if (!_authToken) {
+      location.replace('/login');
+    }
+
+    function _authHeader() { return { 'Authorization': `Bearer ${_authToken}` }; }
+    function _authFetch(url, opts = {}) {
+      opts.headers = Object.assign({}, opts.headers, _authHeader());
+      return fetch(url, opts);
+    }
+
+    // ── AES-256-CBC encryption (CryptoJS) ────────────────────────────────────
+    const _AES_SALT = 'JARVIS-DASHBOARD-v1';
+    let _aesKey = null;
+
+    function _initCrypto(key) {
+      if (typeof CryptoJS === 'undefined') return false;
+      _aesKey = CryptoJS.SHA256(key + _AES_SALT);
+      return true;
+    }
+
+    function _encrypt(plaintext) {
+      if (!_aesKey || typeof CryptoJS === 'undefined') return null;
+      try {
+        const iv  = CryptoJS.lib.WordArray.random(16);
+        const enc = CryptoJS.AES.encrypt(
+          CryptoJS.enc.Utf8.parse(plaintext), _aesKey,
+          { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+        );
+        const ivHex = iv.toString(CryptoJS.enc.Hex);
+        const ctHex = enc.ciphertext.toString(CryptoJS.enc.Hex);
+        const hex   = ivHex + ctHex;
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < bytes.length; i++)
+          bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+        return btoa(String.fromCharCode(...bytes));
+      } catch { return null; }
+    }
+
+    const _encReady = _sessionKey ? _initCrypto(_sessionKey) : false;
+    const encBadge  = document.getElementById('enc');
+    if (_encReady) { encBadge.className = 'enc-badge on'; }
+    else           { encBadge.className = 'enc-badge off'; encBadge.textContent = 'NO ENC'; }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    const feed  = document.getElementById('feed');
+    const pill  = document.getElementById('pill');
+    const stTxt = document.getElementById('st');
+    const wake  = document.getElementById('wake');
+
+    const _wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const _wsUrl   = `${_wsProto}://${location.host}/ws?token=${encodeURIComponent(_authToken)}`;
+    const ws       = new WebSocket(_wsUrl);
+    ws.binaryType  = 'arraybuffer';   // JARVIS voice streams as binary PCM
+
+    ws.onopen    = () => { sys('Remote session active.'); toast('Connected to JARVIS'); };
+    ws.onclose   = () => sys('Connection lost — refresh to reconnect.');
+    ws.onerror   = () => sys('Connection error.');
+    ws.onmessage = (e) => {
+      if (typeof e.data !== 'string') { _playSpk(e.data); return; }  // voice frame
+      const m = JSON.parse(e.data);
+      if (m.type === 'log')           append(m.speaker, m.text);
+      if (m.type === 'status')        setStatus(m.state);
+      if (m.type === 'wake')          sys('Wake word detected — connecting…');
+      if (m.type === 'sys')           sys(m.text);
+      if (m.type === 'file_received') _onFileReceived(m);
+      if (m.type === 'devices')       _setDevCount(m.count);
+      if (m.type === 'dev_id')        { _myDevId = m.id; _maybeRestoreHp(); }
+      if (m.type === 'headphones') {
+        if (m.action === 'listen') sys('🎧 Headphone button pressed — EDIT listening…');
+        if ('sink' in m) _applySink(m.sink);
+      }
+      if (m.type === 'tts') {
+        if (m.cancel) { _stopTts(); _stopSpk(); }
+        else if (m.text) _speakTts(m.text);
+      }
+      if (m.type === 'vision_status') sys(m.state === 'error' ? m.text : 'Phone camera: ' + m.state + '…');
+      if (m.type === 'holo_project' && m.project) {
+        const chip = document.getElementById('holo-project-chip');
+        if (chip) chip.textContent = String(m.project.id || 'HOLO PROJECT');
+        const modelSelect = document.getElementById('holo-model-select');
+        if (modelSelect && ['glasses', 'glove', 'suit', 'custom'].includes(m.project.model)) {
+          modelSelect.value = m.project.model;
+        }
+        const subjectInput = document.getElementById('holo-subject');
+        if (subjectInput && m.project.subject) subjectInput.value = String(m.project.subject).slice(0, 120);
+        if (holoOverlay.classList.contains('open')) {
+          renderHoloModel();
+          holoStageStatus.textContent = String(m.project.subject || m.project.name || 'HOLO PROJECT').toUpperCase() + ' / SYNCED';
+          holoReadoutStatus.textContent = 'SYNCED';
+        }
+      }
+      if (m.type === 'live_dets') {
+        // PC-side live detection shared back → draw boxes on the phone too
+        if (camOverlay.classList.contains('open') && Array.isArray(m.detections)) {
+          _lastDets = m.detections;
+          _drawBoxes();
+        }
+      }
+      _onVisionMsg(m);
+    };
+
+    function setStatus(s) {
+      if (s === 'active') {
+        pill.className = 'pill on'; stTxt.textContent = 'Active'; wake.classList.remove('show');
+      } else {
+        pill.className = 'pill'; stTxt.textContent = 'Sleeping'; wake.classList.add('show');
+      }
+    }
+
+    function append(speaker, text) {
+      const d = document.createElement('div');
+      if (speaker === 'jarvis') {
+        d.className = 'msg msg-j';
+        d.innerHTML = `<div class="lbl">Jarvis</div>${esc(text)}`;
+      } else {
+        d.className = 'msg msg-u';
+        d.innerHTML = `<div class="lbl">You</div>${esc(text)}`;
+      }
+      feed.appendChild(d);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function sys(text) {
+      const d = document.createElement('div');
+      d.className = 'msg msg-sys'; d.textContent = text;
+      feed.appendChild(d); feed.scrollTop = feed.scrollHeight;
+    }
+
+    function esc(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── File helpers ──────────────────────────────────────────────────────────
+    function _fileIcon(name) {
+      const ext = (name.split('.').pop() || '').toLowerCase();
+      if (['jpg','jpeg','png','gif','webp','heic','heif','avif','bmp','svg'].includes(ext)) return '🖼️';
+      if (['mp4','mov','avi','mkv','webm','m4v','3gp'].includes(ext))                       return '🎬';
+      if (['mp3','m4a','wav','flac','aac','ogg','opus'].includes(ext))                      return '🎵';
+      if (['pdf'].includes(ext))                                                             return '📋';
+      if (['doc','docx','txt','md','rtf','odt'].includes(ext))                              return '📝';
+      if (['xls','xlsx','csv','ods'].includes(ext))                                         return '📊';
+      if (['ppt','pptx','odp'].includes(ext))                                               return '📑';
+      if (['zip','rar','7z','tar','gz','bz2','xz'].includes(ext))                          return '📦';
+      if (['apk','exe','dmg','deb','rpm','msi'].includes(ext))                              return '⚙️';
+      return '📎';
+    }
+
+    function _fmtSize(bytes) {
+      if (bytes < 1024)             return bytes + ' B';
+      if (bytes < 1024 * 1024)     return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 ** 3)       return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+      return (bytes / 1024 ** 3).toFixed(2) + ' GB';
+    }
+
+    // ── File upload (phone → computer) ────────────────────────────────────────
+    function _uploadFile(file) {
+      const id = 'fc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+
+      // Create file card in feed
+      const card = document.createElement('div');
+      card.className = 'msg-file';
+      card.id = id;
+      card.innerHTML = `
+        <div class="fc-icon">${_fileIcon(file.name)}</div>
+        <div class="fc-meta">
+          <div class="fc-lbl">Sending</div>
+          <div class="fc-name">${esc(file.name)}</div>
+          <div class="fc-size">${_fmtSize(file.size)}</div>
+          <div class="fc-bar-wrap"><div class="fc-bar" id="${id}_bar"></div></div>
+        </div>
+        <div class="fc-status" id="${id}_st">0%</div>
+      `;
+      feed.appendChild(card);
+      feed.scrollTop = feed.scrollHeight;
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/upload');
+      xhr.setRequestHeader('Authorization', `Bearer ${_authToken}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.round(e.loaded / e.total * 100);
+        const bar = document.getElementById(`${id}_bar`);
+        const st  = document.getElementById(`${id}_st`);
+        if (bar) bar.style.width = pct + '%';
+        if (st)  st.textContent  = pct + '%';
+      };
+
+      xhr.onload = () => {
+        const bar  = document.getElementById(`${id}_bar`);
+        const st   = document.getElementById(`${id}_st`);
+        const meta = card.querySelector('.fc-meta');
+        const lbl  = card.querySelector('.fc-lbl');
+        if (xhr.status === 200) {
+          let savedName = file.name;
+          try { savedName = JSON.parse(xhr.responseText).name || file.name; } catch {}
+          const dlUrl = `/uploads/${encodeURIComponent(savedName)}?token=${encodeURIComponent(_authToken)}`;
+          if (bar)  { bar.style.width = '100%'; bar.style.background = 'var(--green)'; }
+          if (st)   { st.textContent = '✓'; st.className = 'fc-status done'; }
+          if (lbl)  lbl.textContent = 'Sent';
+          if (meta) meta.insertAdjacentHTML('beforeend',
+            `<a class="fc-dl" href="${dlUrl}" download="${esc(savedName)}">⬇ Download back</a>`);
+          toast('File sent!');
+        } else {
+          let errMsg = 'Upload failed';
+          try { errMsg = JSON.parse(xhr.responseText).error || errMsg; } catch {}
+          if (bar) bar.style.background = '#f87171';
+          if (st)  { st.textContent = 'ERR'; st.className = 'fc-status err'; }
+          if (lbl) lbl.textContent = errMsg;
+        }
+      };
+
+      xhr.onerror = () => {
+        const st  = document.getElementById(`${id}_st`);
+        const lbl = card.querySelector('.fc-lbl');
+        if (st)  { st.textContent = 'ERR'; st.className = 'fc-status err'; }
+        if (lbl) lbl.textContent = 'Connection error';
+      };
+
+      const fd = new FormData();
+      fd.append('file', file);
+      xhr.send(fd);
+    }
+
+    // File received by another WebSocket client (e.g., second open tab)
+    function _onFileReceived(m) {
+      const dlUrl = `/uploads/${encodeURIComponent(m.name)}?token=${encodeURIComponent(_authToken)}`;
+      const card  = document.createElement('div');
+      card.className = 'msg-file';
+      card.innerHTML = `
+        <div class="fc-icon">${_fileIcon(m.name)}</div>
+        <div class="fc-meta">
+          <div class="fc-lbl">Received</div>
+          <div class="fc-name">${esc(m.name)}</div>
+          <div class="fc-size">${_fmtSize(m.size)}</div>
+          <a class="fc-dl" href="${dlUrl}" download="${esc(m.name)}">⬇ Download</a>
+        </div>
+        <div class="fc-status done">✓</div>
+      `;
+      feed.appendChild(card);
+      feed.scrollTop = feed.scrollHeight;
+      toast('File received on computer!');
+    }
+
+    // File input change handler
+    document.getElementById('file-inp').addEventListener('change', function () {
+      Array.from(this.files).forEach(_uploadFile);
+      this.value = ''; // reset so the same file can be re-sent
+    });
+
+    // ── Commands ──────────────────────────────────────────────────────────────
+    function doSend() {
+      const inp = document.getElementById('inp');
+      const txt = inp.value.trim();
+      if (!txt) return;
+      inp.value = '';
+      append('user', txt);
+      const enc  = _encrypt(txt);
+      const body = enc ? { enc } : { text: txt };
+      _authFetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    function doWake() {
+      sys('Sending wake signal…');
+      _authFetch('/api/wake', { method: 'POST' });
+    }
+
+    document.getElementById('inp').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+    });
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    let _toastTimer;
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    // ── JARVIS voice on phone — 24 kHz PCM16 binary frames over /ws ──────────
+    let _spkOn   = true;
+    let _spkCtx  = null;
+    let _spkNext = 0;   // scheduled end-time of the last queued buffer
+
+    function toggleSpk() {
+      _spkOn = !_spkOn;
+      const b = document.getElementById('spk-btn');
+      b.textContent = _spkOn ? '🔊' : '🔇';
+      b.classList.toggle('muted', !_spkOn);
+      toast(_spkOn ? 'JARVIS voice: ON' : 'JARVIS voice: OFF');
+    }
+
+    // ── Headphones mode (🎧) — Bluetooth headphones connected to THIS phone ──
+    // When ON, the headphone's own multifunction button (AVRCP play/pause)
+    // becomes push-to-listen: EDIT stops talking on the PC and hears you
+    // through this phone's microphone (= the headset mic).  EDIT's voice
+    // already plays on the phone's default output — the headphones.
+    let _hpOn      = false;
+    let _hpAudio   = null;   // silent loop keeps this tab the active media session
+    let _hpMicOwned = false; // true when the mode opened the mic itself
+    let _myDevId   = null;   // this tab's id, assigned by the server on /ws connect
+
+    // ── PWA install — "add EDIT to the home screen" as an app ─────────────
+    let _deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      _deferredPrompt = e;
+      const b = document.getElementById('install-btn');
+      if (b) b.style.display = '';
+    });
+    window.addEventListener('appinstalled', () => {
+      const b = document.getElementById('install-btn');
+      if (b) b.style.display = 'none';
+      toast('EDIT установлен на телефон 🎉');
+    });
+    async function installApp() {
+      if (_deferredPrompt) {
+        _deferredPrompt.prompt();
+        await _deferredPrompt.userChoice.catch(() => {});
+        _deferredPrompt = null;
+      } else {
+        toast('Откройте ⋮ → «Добавить на главный экран»');
+      }
+    }
+    // Register the service worker (installed app works offline-ish + standalone)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+
+    // ── Wake Lock — keep the screen ON while Headphones Mode / mic is live ──
+    // When Android locks the screen the browser suspends WebAudio + the mic,
+    // so the sound dies.  The screen wake lock prevents the lock entirely.
+    let _wl = null;
+    async function _requestWakeLock() {
+      if (_wl) return;
+      try {
+        if (navigator.wakeLock && navigator.wakeLock.request) {
+          _wl = await navigator.wakeLock.request('screen');
+          _wl.addEventListener('release', () => { _wl = null; });
+        }
+      } catch (_) {}
+    }
+    function _releaseWakeLock() {
+      try { if (_wl) { _wl.release(); } } catch (_) {}
+      _wl = null;
+    }
+    // Re-evaluate: hold the lock while headphones mode is on OR the phone mic
+    // is streaming; drop it otherwise.
+    function _refreshWakeLock() {
+      if (_hpOn || _voiceWs) _requestWakeLock();
+      else _releaseWakeLock();
+    }
+
+    function _setPhoneHpMode(on) {
+      _authFetch('/api/headphones/phone-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: on, dev_id: _myDevId })
+      }).catch(() => {});
+    }
+
+    async function toggleHeadphones() {
+      const next = !_hpOn;
+      if (next) {
+        if (!_startHpMode()) {
+          sys('🎧 Headphones mode: this browser cannot catch the headphone button (needs Chrome/Android mediaSession).');
+          return;
+        }
+        _hpOn = true;
+        localStorage.setItem('hp_mode', '1');
+        // Mute the PC speaker and make THIS tab the only audio sink —
+        // EDIT's voice comes only through the phone (= the headphones),
+        // never duplicated on a second tab/device.
+        _setPhoneHpMode(true);
+        _refreshWakeLock();   // keep the screen on so the sound keeps working
+        sys('🎧 Headphones mode ON — EDIT speaks ONLY in your headphones, PC speakers muted. Tap your Gelius (single tap) to talk');
+        // Ask for mic permission now (inside the tap gesture) and open the
+        // headset-mic channel — so EDIT already hears you and the headphone
+        // button can restart the stream later without another permission tap.
+        if (!_voiceWs) { doMic(); _hpMicOwned = true; }
+      } else {
+        _stopHpMode();
+        if (_hpMicOwned) {
+          if (_voiceWs) _stopVoice();
+          _hpMicOwned = false;
+        }
+        _hpOn = false;
+        localStorage.setItem('hp_mode', '0');
+        _setPhoneHpMode(false);
+        _refreshWakeLock();
+        sys('🎧 Headphones mode OFF — PC audio restored');
+      }
+      const b = document.getElementById('hp-btn');
+      if (b) b.classList.toggle('on', _hpOn);
+    }
+
+    function _startHpMode() {
+      let ok = false;
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'EDIT — Headphones Mode',
+            artist: 'MARK Remote',
+          });
+          const press = () => _hpButtonPressed();
+          for (const a of ['playpause', 'play', 'pause', 'previoustrack', 'nexttrack']) {
+            try { navigator.mediaSession.setActionHandler(a, press); ok = true; } catch (_) {}
+          }
+        } catch (_) {}
+      }
+      // Keep this tab the "active media session" so AVRCP presses from the
+      // headphones reach the page — a silent looping audio element.
+      try {
+        if (!_hpAudio) {
+          _hpAudio = new Audio(_silentWavUrl());
+          _hpAudio.loop = true;
+          _hpAudio.volume = 0;
+          _hpAudio.muted = true;   // guaranteed silence (some Androids ignore volume=0 over BT)
+          _hpAudio.play().catch(() => {});
+        }
+      } catch (_) {}
+      return ok;
+    }
+
+    function _stopHpMode() {
+      try {
+        for (const a of ['playpause', 'play', 'pause', 'previoustrack', 'nexttrack']) {
+          try { navigator.mediaSession.setActionHandler(a, null); } catch (_) {}
+        }
+        navigator.mediaSession.metadata = null;
+      } catch (_) {}
+      try { if (_hpAudio) { _hpAudio.pause(); _hpAudio = null; } } catch (_) {}
+    }
+
+    function _silentWavUrl() {
+      // tiny silent WAV built in JS (8 kHz mono 16-bit, 0.1 s of zeros)
+      const sr = 8000, n = sr / 10;
+      const buf = new ArrayBuffer(44 + n * 2);
+      const dv = new DataView(buf);
+      const ascii = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+      ascii(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); ascii(8, 'WAVE');
+      ascii(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+      dv.setUint16(22, 1, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
+      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+      ascii(36, 'data'); dv.setUint32(40, n * 2, true);
+      return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    }
+
+    function _hpButtonPressed() {
+      sys('🎧 Headphone button — EDIT listening…');
+      // 0) stop the phone's TTS / streamed Jarvis voice instantly
+      _stopTts();
+      _stopSpk();
+      // 1) EDIT stops talking on the PC and opens the channel
+      _authFetch('/api/headphones/button', { method: 'POST' }).catch(() => {});
+      // 2) stream this phone's mic (= headset mic) so EDIT hears the user
+      if (!_voiceWs) doMic();
+    }
+
+    // Only the audio-sink tab (the one running Headphones Mode) plays EDIT's
+    // voice — every other tab/device mutes its own speaker so the user never
+    // hears two voices, even if a second tab has the dashboard open.
+    let _hpSinkId = null;
+    function _applySink(id) {
+      _hpSinkId = id || null;
+      _spkOn = !(_hpSinkId && _hpSinkId !== _myDevId);
+      const b = document.getElementById('spk-btn');
+      if (b) {
+        b.textContent = _spkOn ? '🔊' : '🔇';
+        b.classList.toggle('muted', !_spkOn);
+      }
+    }
+
+    // ── TTS voice module — the phone's own speech synthesis ────────────────
+    // EDIT's replies arrive as TEXT; this phone's system TTS module voices
+    // them into the headphones.  The AI's audio stream is not used at all,
+    // so there is exactly ONE voice.
+    let _ttsVoice = null;
+    if (window.speechSynthesis) {
+      const _pickVoice = () => {
+        try {
+          const vs = speechSynthesis.getVoices();
+          for (const v of vs) {
+            if (/^(uk|ru|be|bg)-/i.test(v.lang)) { _ttsVoice = v; break; }
+          }
+        } catch (_) {}
+      };
+      _pickVoice();
+      try { speechSynthesis.onvoiceschanged = _pickVoice; } catch (_) {}
+    }
+
+    function _speakTts(text) {
+      if (!window.speechSynthesis || !_spkOn) return;   // non-sink tabs stay silent
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        if (_ttsVoice) u.voice = _ttsVoice;
+        u.rate  = 1.0;
+        u.pitch = 1.0;
+        speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+
+    function _stopTts() {
+      if (window.speechSynthesis) {
+        try { speechSynthesis.cancel(); } catch (_) {}
+      }
+    }
+
+    // Stop the streamed voice (Jarvis Voice Module PCM) immediately.
+    function _stopSpk() {
+      _spkNext = 0;
+      if (_spkCtx) { try { _spkCtx.close(); } catch (_) {} _spkCtx = null; }
+    }
+
+    // restore the mode after a page reload (the PC side keeps its mute flag).
+    // Runs once we know this tab's dev_id, so the server can make THIS tab
+    // the audio sink again.
+    function _maybeRestoreHp() {
+      if (localStorage.getItem('hp_mode') !== '1' || _hpOn || !_myDevId) return;
+      if (_startHpMode()) {
+        _hpOn = true;
+        const b = document.getElementById('hp-btn');
+        if (b) b.classList.toggle('on', true);
+        _setPhoneHpMode(true);
+        _refreshWakeLock();
+        sys('🎧 Headphones mode restored — tap your Gelius to talk to EDIT');
+      } else {
+        localStorage.setItem('hp_mode', '0');
+        _setPhoneHpMode(false);
+      }
+    }
+
+    // ── Keep the session alive when the app comes back to the foreground ──
+    // Android drops the screen wake lock and suspends WebAudio when the page
+    // is hidden, so re-request the lock and resume the audio contexts as soon
+    // as the user returns.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (_hpOn || _voiceWs) _requestWakeLock();
+      try { if (_spkCtx && _spkCtx.state === 'suspended') _spkCtx.resume(); } catch (_) {}
+      try { if (_hpAudio) _hpAudio.play().catch(() => {}); } catch (_) {}
+    });
+    window.addEventListener('focus', () => {
+      if (_hpOn || _voiceWs) _requestWakeLock();
+    });
+
+    function _playSpk(buf) {
+      if (!_spkOn) return;
+      try {
+        if (!_spkCtx) _spkCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        const ctx = _spkCtx;
+        if (ctx.state === 'suspended') ctx.resume();   // unlocked by pointerdown below
+        const i16 = new Int16Array(buf);
+        const f32 = new Float32Array(i16.length);
+        for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+        const ab = ctx.createBuffer(1, f32.length, 24000);
+        ab.getChannelData(0).set(f32);
+        const src = ctx.createBufferSource();
+        src.buffer = ab;
+        src.connect(ctx.destination);
+        // fell >1.2 s behind (network hiccup) → resync instead of lagging
+        if (_spkNext - ctx.currentTime > 1.2 || _spkNext < ctx.currentTime)
+          _spkNext = ctx.currentTime + 0.15;   // 150 ms jitter cushion for LAN WiFi
+        src.start(_spkNext);
+        _spkNext += ab.duration;
+      } catch (_) {}
+    }
+
+    // True while JARVIS audio is still queued on this phone's speaker —
+    // used to keep the phone mic from echoing JARVIS back to himself
+    function _spkActive() {
+      return !!(_spkCtx && _spkNext > _spkCtx.currentTime + 0.15);
+    }
+
+    // mobile browsers keep AudioContext suspended until the first user gesture
+    document.addEventListener('pointerdown', () => {
+      if (_spkCtx && _spkCtx.state === 'suspended') _spkCtx.resume();
+    }, { passive: true });
+
+    // ── Devices hub panel ─────────────────────────────────────────────────────
+    function _setDevCount(n) {
+      const c = document.getElementById('dev-count');
+      if (c) c.textContent = (typeof n === 'number') ? n : 0;
+    }
+
+    function toggleDevPanel() {
+      const p = document.getElementById('dev-panel');
+      p.classList.toggle('open');
+      if (p.classList.contains('open')) loadDevices();
+    }
+
+    async function loadDevices() {
+      const list = document.getElementById('dev-list');
+      try {
+        const r = await _authFetch('/api/devices');
+        const d = await r.json();
+        document.getElementById('dp-paired-n').textContent = d.paired || 0;
+        _setDevCount((d.devices || []).length);
+        if (!d.devices || !d.devices.length) {
+          list.innerHTML = '<div class="dp-empty">no remotes connected</div>';
+          return;
+        }
+        list.innerHTML = '';
+        d.devices.forEach(dev => {
+          const mm = String(Math.floor((dev.secs || 0) / 60)).padStart(2, '0');
+          const ss = String((dev.secs || 0) % 60).padStart(2, '0');
+          const row = document.createElement('div');
+          row.className = 'dp-row';
+          row.innerHTML =
+            `<div class="dp-meta"><b>${esc(dev.name)}</b> · ${esc(dev.ip)} <i>· ${mm}:${ss}</i></div>` +
+            `<button class="dp-kick">KICK</button>`;
+          row.querySelector('.dp-kick').addEventListener('click', async () => {
+            await _authFetch('/api/disconnect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: dev.id }),
+            });
+            toast('Device disconnected');
+            loadDevices();
+          });
+          list.appendChild(row);
+        });
+      } catch (_) {
+        list.innerHTML = '<div class="dp-empty">failed to load devices</div>';
+      }
+    }
+
+    async function revokePaired() {
+      try {
+        const r = await _authFetch('/api/revoke-devices', { method: 'POST' });
+        const d = await r.json();
+        document.getElementById('dp-paired-n').textContent = 0;
+        toast(`Revoked ${d.revoked || 0} paired device(s)`);
+      } catch (_) {
+        toast('Revoke failed');
+      }
+    }
+
+    // ── Real-time Voice — PCM16 WebSocket → Gemini Live ──────────────────────
+    const micBtn  = document.getElementById('mic-btn');
+    let _voiceWs  = null;
+    let _audioCtx = null;
+    let _micStm   = null;
+    let _audioNd  = null;
+
+    function _micIdle() {
+      micBtn.innerHTML = '🎤';
+      micBtn.title     = 'Voice — tap to speak';
+      micBtn.classList.remove('recording');
+    }
+
+    // Float32 PCM → resample to 16 kHz + convert to Int16
+    function _f32toPcm16(f32, srcRate) {
+      let s = f32;
+      if (srcRate !== 16000) {
+        const ratio = srcRate / 16000;
+        const len   = Math.round(f32.length / ratio);
+        s = new Float32Array(len);
+        for (let i = 0; i < len; i++)
+          s[i] = f32[Math.min(Math.round(i * ratio), f32.length - 1)];
+      }
+      const out = new Int16Array(s.length);
+      for (let i = 0; i < s.length; i++)
+        out[i] = Math.max(-32768, Math.min(32767, Math.round(s[i] * 32768)));
+      return out.buffer;
+    }
+
+    function _showVoiceSetup() {
+      if (document.getElementById('voice-setup')) return; // show once
+      const origin = location.origin;
+      const card = document.createElement('div');
+      card.id = 'voice-setup';
+      card.style.cssText = [
+        'align-self:stretch', 'background:rgba(99,102,241,0.07)',
+        'border:1px solid rgba(99,102,241,0.22)', 'border-radius:14px',
+        'padding:16px 18px', 'font-size:13px', 'line-height:1.8',
+        'animation:pop 0.18s ease'
+      ].join(';');
+      card.innerHTML =
+        '<div style="font-weight:700;color:#818cf8;letter-spacing:.5px;margin-bottom:10px">🎤📷 One-time mic & camera setup</div>' +
+        '<ol style="padding-left:18px;color:#8899aa;margin:0;display:flex;flex-direction:column;gap:4px">' +
+        '<li>Open a new tab → go to <span style="background:rgba(255,255,255,0.07);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px">chrome://flags</span></li>' +
+        '<li>Search: <strong style="color:#dde3ed">Insecure origins treated as secure</strong></li>' +
+        '<li>Paste this URL into the box:<br><span id="flags-url" style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:4px;font-family:monospace;font-size:11px;user-select:all;cursor:pointer">' + esc(origin) + '</span></li>' +
+        '<li>Set to <strong style="color:#22c55e">Enabled</strong> → tap <strong style="color:#dde3ed">Relaunch</strong></li>' +
+        '<li>Return here and tap 🎤 or 📷</li>' +
+        '</ol>';
+      feed.appendChild(card);
+      feed.scrollTop = feed.scrollHeight;
+      // tap to copy
+      card.querySelector('#flags-url').addEventListener('click', () => {
+        navigator.clipboard?.writeText(origin).then(() => toast('URL copied!')).catch(() => {});
+      });
+    }
+
+    async function doMic() {
+      if (_voiceWs) { _stopVoice(); return; }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        _showVoiceSetup();
+        return;
+      }
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        });
+      } catch (e) {
+        sys(e.name === 'NotAllowedError'
+          ? 'Microphone denied — tap the address bar lock and allow microphone.'
+          : 'Mic error: ' + e.message);
+        return;
+      }
+
+      // 16 kHz context (fall back to native rate — _f32toPcm16 resamples)
+      let ctx;
+      try { ctx = new AudioContext({ sampleRate: 16000 }); }
+      catch (_) { ctx = new AudioContext(); }
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(
+        `${wsProto}://${location.host}/ws/phone-audio?token=${encodeURIComponent(_authToken)}`
+      );
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = async () => {
+        const rate = ctx.sampleRate;
+        const src  = ctx.createMediaStreamSource(stream);
+
+        // AudioWorklet (modern) — runs in dedicated audio thread
+        const wCode = `class J extends AudioWorkletProcessor{process(i){const c=i[0]?.[0];if(c)this.port.postMessage(c.slice());return true;}}registerProcessor('j',J);`;
+        try {
+          const burl = URL.createObjectURL(new Blob([wCode], { type: 'application/javascript' }));
+          await ctx.audioWorklet.addModule(burl);
+          URL.revokeObjectURL(burl);
+          const nd = new AudioWorkletNode(ctx, 'j');
+          // Buffer to 1024 samples (64 ms at 16 kHz) before sending —
+          // matches PC mic chunk size, prevents queue flooding on the server.
+          let _pbuf = [], _plen = 0;
+          nd.port.onmessage = e => {
+            if (_spkActive()) return;   // don't echo JARVIS's own voice back to him
+            if (window.speechSynthesis && speechSynthesis.speaking) return;  // don't echo the TTS voice
+            const chunk = new Int16Array(_f32toPcm16(e.data, rate));
+            _pbuf.push(chunk); _plen += chunk.length;
+            if (_plen >= 1024) {
+              const out = new Int16Array(_plen); let off = 0;
+              for (const c of _pbuf) { out.set(c, off); off += c.length; }
+              if (ws.readyState === 1) ws.send(out.buffer);
+              _pbuf = []; _plen = 0;
+            }
+          };
+          src.connect(nd);
+          _audioNd = nd;
+        } catch (_) {
+          // ScriptProcessor fallback (deprecated, still works everywhere).
+          // IMPORTANT: do NOT connect to ctx.destination — that would play
+          // the mic into the speaker/earbuds and the user would hear EDIT's
+          // own voice twice (direct + echoed through the headset mic).
+          const sp = ctx.createScriptProcessor(4096, 1, 1);
+          sp.onaudioprocess = e => {
+            if (_spkActive()) return;   // don't echo JARVIS's own voice back to him
+            if (window.speechSynthesis && speechSynthesis.speaking) return;  // don't echo the TTS voice
+            if (ws.readyState === 1) ws.send(_f32toPcm16(e.inputBuffer.getChannelData(0), rate));
+          };
+          src.connect(sp);
+          _audioNd = sp;
+        }
+
+        micBtn.innerHTML = '⏹';
+        micBtn.title     = 'Tap to stop';
+        micBtn.classList.add('recording');
+        sys('Voice live — speak now');
+        toast('🎤 Live');
+      };
+
+      ws.onclose = () => { _stopVoice(); };
+      ws.onerror = () => { sys('Voice connection failed.'); _stopVoice(); };
+
+      _voiceWs  = ws;
+      _audioCtx = ctx;
+      _micStm   = stream;
+      _refreshWakeLock();   // screen stays on while the mic is live
+    }
+
+    function _stopVoice() {
+      if (_audioNd)  { try { _audioNd.disconnect(); }  catch (_) {}; _audioNd  = null; }
+      if (_audioCtx) { try { _audioCtx.close(); }      catch (_) {}; _audioCtx = null; }
+      if (_micStm)   { _micStm.getTracks().forEach(t => t.stop()); _micStm = null; }
+      if (_voiceWs)  {
+        const w = _voiceWs; _voiceWs = null;
+        if (w.readyState < 2) w.close();
+      }
+      _micIdle();
+      _refreshWakeLock();
+    }
+
+    // ── Phone Camera — EDITH Vision ───────────────────────────────────────────
+    const camOverlay = document.getElementById('cam-overlay');
+    const camVideo   = document.getElementById('cam-video');
+    const camBoxes   = document.getElementById('cam-boxes');
+    const camFx      = document.getElementById('cam-fx');
+    const camStatus  = document.getElementById('cam-status');
+    const camTargets = document.getElementById('cam-targets');
+    const camLogEl   = document.getElementById('cam-log');
+    let _camStream = null;
+    let _facing    = 'environment';   // back camera by default — point it at the world
+    let _scanning  = false;
+    let _lastDets  = [];
+
+    async function openCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) { _showVoiceSetup(); return; }
+      camOverlay.classList.add('open');
+      if (!_camStream) await _startCamStream();
+    }
+
+    async function _startCamStream() {
+      _stopCamStream();
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: _facing }, width: { ideal: 1280 } },
+          audio: false,
+        });
+      } catch (_) {
+        try { stream = await navigator.mediaDevices.getUserMedia({ video: true }); }
+        catch (e2) {
+          camStatus.textContent = (e2.name === 'NotAllowedError')
+            ? 'CAMERA DENIED — allow camera in browser settings'
+            : 'CAMERA ERROR: ' + (e2.message || e2.name);
+          return;
+        }
+      }
+      _camStream = stream;
+      camVideo.srcObject = stream;
+      // mirror selfie previews; rear camera stays natural
+      camVideo.style.transform = (_facing === 'user') ? 'scaleX(-1)' : 'none';
+      camStatus.textContent = 'LIVE FEED — TAP SCAN TO IDENTIFY';
+    }
+
+    function _stopCamStream() {
+      if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+    }
+
+    function closeCamera() {
+      stopLive();
+      camOverlay.classList.remove('open');
+      _stopCamStream();
+      camVideo.srcObject = null;
+      _lastDets = [];
+      camBoxes.innerHTML = ''; camFx.innerHTML = '';
+      camTargets.textContent = 'NO TARGETS';
+    }
+
+    async function flipCamera() {
+      stopLive();
+      _facing = (_facing === 'environment') ? 'user' : 'environment';
+      _lastDets = []; camBoxes.innerHTML = ''; camFx.innerHTML = '';
+      if (camOverlay.classList.contains('open')) await _startCamStream();
+    }
+
+    function _grabFrame(MAX = 1280, Q = 0.8) {
+      const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+      if (!vw || !vh) return null;
+      const sc  = Math.min(1, MAX / Math.max(vw, vh));
+      const c   = document.createElement('canvas');
+      c.width   = Math.round(vw * sc);
+      c.height  = Math.round(vh * sc);
+      c.getContext('2d').drawImage(camVideo, 0, 0, c.width, c.height);
+      return (c.toDataURL('image/jpeg', Q).split(',')[1]) || null;
+    }
+
+    function _b64ToBytes(b64) {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    }
+
+    // ── LIVE — stream the phone camera onto the PC HUD ──────────────────────
+    let _liveWs = null, _liveTimer = null, _liveRaf = null;
+
+    function toggleLive() {
+      if (_liveWs || _liveTimer) { stopLive(); return; }
+      const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(
+        `${wsProto}://${location.host}/ws/phone-cam?token=${encodeURIComponent(_authToken)}`
+      );
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        _liveWs = ws;
+        const btn = document.getElementById('cam-live');
+        btn.classList.add('on'); btn.textContent = '⏹';
+        camStatus.textContent = 'STREAMING TO PC — LIVE';
+        toast('📡 Live on PC');
+        // Target 60 FPS. Driven by requestAnimationFrame (which is already
+        // vsync-aligned) instead of a fixed timer, and back-pressured on
+        // ws.bufferedAmount so a slow link drops frames rather than piling
+        // up latency.
+        const FRAME_MS = 1000 / 60;
+        let _lastSend = 0;
+        const pump = (now) => {
+          if (!_liveWs || ws.readyState !== 1) return;
+          _liveRaf = requestAnimationFrame(pump);
+          if (now - _lastSend < FRAME_MS) return;
+          // skip while the socket is still draining the previous frames
+          if (ws.bufferedAmount > 512 * 1024) return;
+          _lastSend = now;
+          const f = _grabFrame(640, 0.5);
+          if (f) ws.send(_b64ToBytes(f));
+        };
+        _liveRaf = requestAnimationFrame(pump);
+      };
+      ws.onclose = () => stopLive();
+      ws.onerror = () => stopLive();
+    }
+
+    function stopLive() {
+      if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
+      if (_liveRaf) { cancelAnimationFrame(_liveRaf); _liveRaf = null; }
+      if (_liveWs) {
+        const w = _liveWs; _liveWs = null;
+        if (w.readyState < 2) w.close();
+      }
+      const btn = document.getElementById('cam-live');
+      btn.classList.remove('on'); btn.textContent = 'LIVE';
+      if (camOverlay.classList.contains('open'))
+        camStatus.textContent = _lastDets.length ? 'ANALYSIS COMPLETE' : 'LIVE FEED — TAP SCAN TO IDENTIFY';
+    }
+
+    async function doScan() {
+      if (_scanning) return;
+      const frame = _grabFrame();
+      if (!frame) { camStatus.textContent = 'NO VIDEO SIGNAL'; return; }
+      _scanning = true;
+      const btn = document.getElementById('cam-scan');
+      btn.disabled = true; btn.style.opacity = '0.45'; btn.textContent = '···';
+      const qInp = document.getElementById('cam-q');
+      const question = qInp.value.trim();
+      _lastDets = []; camBoxes.innerHTML = ''; camFx.innerHTML = '';
+      camStatus.textContent  = 'SCANNING — ANALYZING FEED…';
+      camTargets.textContent = 'PROCESSING…';
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, _authHeader());
+
+      // 1) HUD detection → labeled boxes drawn right here on the overlay
+      fetch('/api/vision-hud', { method: 'POST', headers, body: JSON.stringify({ frame }) })
+        .then(r => r.json())
+        .then(d => {
+          if (d.ok && Array.isArray(d.detections)) { _lastDets = d.detections; _drawBoxes(); }
+          else camTargets.textContent = 'HUD: ' + (d.error || 'OFFLINE');
+        })
+        .catch(() => { camTargets.textContent = 'HUD UPLINK FAILED'; })
+        .finally(() => {
+          _scanning = false; btn.disabled = false;
+          btn.style.opacity = '1'; btn.textContent = 'SCAN';
+        });
+
+      // 2) Full analysis → JARVIS speaks the answer on the PC,
+      //    while the transcript appears here and in the chat feed
+      fetch('/api/vision-scan', { method: 'POST', headers, body: JSON.stringify({ frame, question }) })
+        .then(r => r.json())
+        .then(d => {
+          if (d.ok) { toast('📷 Frame sent to JARVIS'); qInp.value = ''; }
+          else camStatus.textContent = 'SCAN REJECTED: ' + (d.error || 'UNKNOWN');
+        })
+        .catch(() => { camStatus.textContent = 'UPLINK FAILED — CHECK CONNECTION'; });
+    }
+
+    document.getElementById('cam-q').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); doScan(); }
+    });
+
+    // ── EDITH person effect: silhouette aura + skeleton ─────────────────────
+    const _BONES = [
+      ['head','neck'],['neck','l_shoulder'],['neck','r_shoulder'],
+      ['l_shoulder','l_elbow'],['l_elbow','l_wrist'],
+      ['r_shoulder','r_elbow'],['r_elbow','r_wrist'],
+      ['neck','pelvis'],['l_shoulder','l_hip'],['r_shoulder','r_hip'],
+      ['pelvis','l_hip'],['pelvis','r_hip'],['l_hip','r_hip'],
+      ['l_hip','l_knee'],['l_knee','l_ankle'],
+      ['r_hip','r_knee'],['r_knee','r_ankle'],
+    ];
+
+    function _fallbackRig(x, y, w, h) {
+      const P = (fx, fy) => [x + w * fx, y + h * fy];
+      return {
+        head: P(.50,.07), neck: P(.50,.17),
+        l_shoulder: P(.31,.21), r_shoulder: P(.69,.21),
+        l_elbow: P(.22,.39),    r_elbow: P(.78,.39),
+        l_wrist: P(.19,.56),    r_wrist: P(.81,.56),
+        pelvis: P(.50,.53),
+        l_hip: P(.38,.55),      r_hip: P(.62,.55),
+        l_knee: P(.37,.75),     r_knee: P(.63,.75),
+        l_ankle: P(.36,.96),    r_ankle: P(.64,.96),
+      };
+    }
+
+    // Biometric face mask — node cloud + tesselation, drawn as one SVG path
+    function _drawFaceMesh(d, geom) {
+      const mesh = d.mesh;
+      if (!Array.isArray(mesh) || mesh.length < 100) return;
+      const { dw, dh, offX, offY, mirror } = geom;
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('class', 'fx-g');
+      const pts = mesh.map(q => {
+        let ny = +q[0], nx = +q[1];
+        if (!isFinite(ny) || !isFinite(nx)) return null;
+        if (mirror) nx = 1000 - nx;
+        return [(nx / 1000) * dw - offX, (ny / 1000) * dh - offY];
+      });
+      if (pts.some(p => !p)) return;
+      const known = !!d.known;
+
+      // one <path> for the whole tesselation keeps the DOM tiny and fast
+      const edges = d.mesh_edges || [];
+      if (edges.length) {
+        let dAttr = '';
+        for (const e of edges) {
+          const a = pts[e[0]], b = pts[e[1]];
+          if (!a || !b) continue;
+          dAttr += `M${a[0].toFixed(1)} ${a[1].toFixed(1)}L${b[0].toFixed(1)} ${b[1].toFixed(1)}`;
+        }
+        const wire = document.createElementNS(NS, 'path');
+        wire.setAttribute('d', dAttr);
+        wire.setAttribute('class', known ? 'fx-mesh fx-mesh-k' : 'fx-mesh');
+        svg.appendChild(wire);
+      }
+      // node dots
+      let nodes = '';
+      for (const p of pts) {
+        nodes += `M${(p[0] - 0.9).toFixed(1)} ${p[1].toFixed(1)}a.9.9 0 1 0 1.8 0a.9.9 0 1 0-1.8 0`;
+      }
+      const nd = document.createElementNS(NS, 'path');
+      nd.setAttribute('d', nodes);
+      nd.setAttribute('class', 'fx-node');
+      svg.appendChild(nd);
+      camFx.appendChild(svg);
+    }
+
+    function _drawPersonFx(d, geom, x, y, w, h) {
+      const { dw, dh, offX, offY, mirror } = geom;
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('class', 'fx-g');
+      const mk = (t, attrs) => {
+        const e = document.createElementNS(NS, t);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        return e;
+      };
+      // normalized [y,x] (0-1000) → screen px, honouring mirror + object-fit cover
+      const pt = q => {
+        let ny = +q[0], nx = +q[1];
+        if (!isFinite(ny) || !isFinite(nx)) return null;
+        if (mirror) nx = 1000 - nx;
+        return [(nx / 1000) * dw - offX, (ny / 1000) * dh - offY];
+      };
+
+      // 1) silhouette outline (fallback: rounded bounding box)
+      let poly = null;
+      if (Array.isArray(d.outline) && d.outline.length >= 4) {
+        const pts = d.outline.slice(0, 40).map(pt).filter(Boolean);
+        if (pts.length >= 4) poly = pts.map(p => p.join(',')).join(' ');
+      }
+      if (poly) {
+        svg.appendChild(mk('polygon', { points: poly, class: 'fx-aura-glow' }));
+        svg.appendChild(mk('polygon', { points: poly, class: 'fx-aura' }));
+      } else {
+        const r = { x, y, width: w, height: h, rx: 10, ry: 10 };
+        svg.appendChild(mk('rect', { ...r, class: 'fx-aura-glow' }));
+        svg.appendChild(mk('rect', { ...r, class: 'fx-aura' }));
+      }
+
+      // 2) bone rig
+      const joints = {};
+      if (d.pose && typeof d.pose === 'object') {
+        for (const k in d.pose) {
+          const p = pt(d.pose[k]);
+          if (p) joints[k] = p;
+        }
+      }
+      // A box-only detector (HOG) has no joints; a generic rig would draw a
+      // skeleton unrelated to the real body, so skip bones entirely.
+      const rig = Object.keys(joints).length >= 3
+        ? joints
+        : (d.no_skeleton ? {} : _fallbackRig(x, y, w, h));
+      _BONES.forEach(([a, b]) => {
+        if (!rig[a] || !rig[b]) return;
+        svg.appendChild(mk('line', {
+          x1: rig[a][0], y1: rig[a][1], x2: rig[b][0], y2: rig[b][1], class: 'fx-bone',
+        }));
+      });
+      for (const k in rig) {
+        const big = (k === 'head' || k === 'neck' || k === 'pelvis');
+        svg.appendChild(mk('circle', {
+          cx: rig[k][0], cy: rig[k][1], r: big ? 4 : 2.6, class: 'fx-joint',
+        }));
+      }
+
+      // 3) scan line sweeping down the target
+      const sweep = mk('line', { x1: x, y1: y, x2: x + w, y2: y, class: 'fx-sweep' });
+      sweep.style.setProperty('--fxh', h + 'px');
+      svg.appendChild(sweep);
+
+      camFx.appendChild(svg);
+    }
+
+    function _drawBoxes() {
+      camBoxes.innerHTML = ''; camFx.innerHTML = '';
+      const vw = camVideo.videoWidth,  vh = camVideo.videoHeight;
+      const cw = camVideo.clientWidth, ch = camVideo.clientHeight;
+      if (!vw || !vh || !cw || !ch) return;
+      // object-fit: cover geometry — boxes must land on the same pixels as the video
+      const scale = Math.max(cw / vw, ch / vh);
+      const dw = vw * scale, dh = vh * scale;
+      const offX = (dw - cw) / 2, offY = (dh - ch) / 2;
+      const mirror = (_facing === 'user');
+      let persons = 0, vehicles = 0, faces = 0, drawn = 0;
+      _lastDets.slice(0, 12).forEach(d => {
+        if (!Array.isArray(d.box) || d.box.length !== 4) return;
+        let [ymin, xmin, ymax, xmax] = d.box.map(Number);
+        if (![ymin, xmin, ymax, xmax].every(isFinite)) return;
+        const cl = v => Math.max(0, Math.min(1000, v));
+        ymin = cl(ymin); xmin = cl(xmin); ymax = cl(ymax); xmax = cl(xmax);
+        if (xmax - xmin < 5 || ymax - ymin < 5) return;
+        if (mirror) { const t = xmin; xmin = 1000 - xmax; xmax = 1000 - t; }
+        const el = document.createElement('div');
+        el.className = 'tag' +
+          (d.kind === 'person' ? ' tag-p'
+           : d.kind === 'vehicle' ? ' tag-v'
+           : d.kind === 'face' ? (d.known ? ' tag-f tag-fk' : ' tag-f')
+           : '');
+        // objects, vehicles, landmarks: tap → JARVIS looks it up & explains.
+        // people and plates are intentionally NOT searchable.
+        const _label = String(d.label || '');
+        if (d.kind !== 'person' && d.kind !== 'face'
+            && !/^PLATE\b/i.test(_label)) {
+          el.classList.add('tag-info');
+          el.addEventListener('click', () => _tagInfo(_label));
+        }
+        el.style.left   = ((xmin / 1000) * dw - offX) + 'px';
+        el.style.top    = ((ymin / 1000) * dh - offY) + 'px';
+        el.style.width  = (((xmax - xmin) / 1000) * dw) + 'px';
+        el.style.height = (((ymax - ymin) / 1000) * dh) + 'px';
+        const lab = document.createElement('span');
+        lab.className = 'tag-l';
+        lab.textContent = String(d.label || 'TARGET').toUpperCase().slice(0, 48);
+        el.appendChild(lab);
+        if (d.detail) {
+          const det = document.createElement('span');
+          det.className = 'tag-d';
+          det.textContent = String(d.detail).slice(0, 70);
+          el.appendChild(det);
+        }
+        camBoxes.appendChild(el);
+        if (d.kind === 'face' && Array.isArray(d.mesh)) {
+          _drawFaceMesh(d, { dw, dh, offX, offY, mirror });
+        }
+        if (d.kind === 'person') {
+          const px = ((xmin / 1000) * dw - offX);
+          const py = ((ymin / 1000) * dh - offY);
+          _drawPersonFx(d, { dw, dh, offX, offY, mirror }, px, py,
+                        ((xmax - xmin) / 1000) * dw, ((ymax - ymin) / 1000) * dh);
+        }
+        drawn++;
+        if (d.kind === 'person') persons++;
+        else if (d.kind === 'vehicle') vehicles++;
+        else if (d.kind === 'face') faces++;
+      });
+      camTargets.textContent = drawn
+        ? `TARGETS: ${drawn} ▸ ${persons} PERSON · ${faces} FACE · ${vehicles} VEHICLE · ${drawn - persons - vehicles - faces} OBJECT`
+        : 'NO TARGETS';
+      if (drawn) camStatus.textContent = 'ANALYSIS COMPLETE — ANSWER INCOMING';
+    }
+
+    window.addEventListener('resize', () => { if (_lastDets.length) _drawBoxes(); });
+    camVideo.addEventListener('resize',  () => { if (_lastDets.length) _drawBoxes(); });
+
+    // ── Tap a tag → JARVIS searches & tells you about that thing ─────────────
+    function _tagInfo(label) {
+      const clean = label.replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!clean) return;
+      camStatus.textContent = 'LOOKUP: ' + clean.toUpperCase();
+      toast('🔎 ' + clean);
+      const q = `The user tapped the "${clean}" annotation on their phone camera HUD. ` +
+                `Briefly explain what "${clean}" is — search the web if it is a specific ` +
+                `product or place. One or two sentences.`;
+      const enc = _encrypt(q);
+      _authFetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(enc ? { enc } : { text: q }),
+      });
+    }
+
+    function _onVisionMsg(m) {
+      if (!camOverlay.classList.contains('open')) return;
+      if (m.type === 'vision_status') {
+        if (m.state === 'received')      camStatus.textContent = 'FRAME RECEIVED BY JARVIS';
+        else if (m.state === 'analyzing') camStatus.textContent = 'JARVIS IS ANALYZING…';
+        else if (m.text)                  camStatus.textContent = String(m.text).toUpperCase();
+      }
+      // mirror conversation into the HUD while the overlay is open
+      if (m.type === 'log') {
+        const line = document.createElement('div');
+        line.className = 'cam-log-line' + (m.speaker === 'jarvis' ? '' : ' ul');
+        line.textContent = (m.speaker === 'jarvis' ? 'JARVIS ▸ ' : 'YOU ▸ ') + m.text;
+        camLogEl.appendChild(line);
+        while (camLogEl.children.length > 3) camLogEl.removeChild(camLogEl.firstChild);
+      }
+    }
+
+    // ── Holo Lab — safe, visual wearable prototyping studio ─────────────────
+    const _HOLO_MODELS = {
+      glasses: {
+        name: 'SMART OPTICS', type: 'CAMERA + AR DISPLAY',
+        parts: [
+          { name: 'OPTICAL CAMERA', detail: 'wide-angle scene input', x: 76, y: 27 },
+          { name: 'HUD LENS', detail: 'transparent information layer', x: 33, y: 42 },
+          { name: 'EDGE SENSOR', detail: 'light and motion sensing', x: 68, y: 67 },
+          { name: 'TEMPLE CORE', detail: 'compute + battery enclosure', x: 77, y: 82 },
+        ],
+        svg: `<svg class="holo-svg" viewBox="0 0 600 400" role="img" aria-label="Smart glasses concept">
+          <g class="h-part h-frame"><path class="h-frame" d="M104 164 Q124 125 175 125 H258 Q286 125 300 149 Q314 125 342 125 H425 Q476 125 496 164 L484 186 Q470 203 443 203 H357 Q323 203 310 177 L300 164 L290 177 Q277 203 243 203 H157 Q130 203 116 186 Z"/><path class="h-frame" d="M106 162 L54 144 M494 162 L546 144 M298 151 L302 151" fill="none"/></g>
+          <g class="h-part h-glass h-display"><path class="h-glass" d="M122 164 Q139 140 174 140 H250 Q268 140 277 157 Q266 187 243 188 H159 Q137 188 122 164 Z"/><path class="h-glass" d="M323 157 Q332 140 350 140 H426 Q461 140 478 164 Q463 188 441 188 H357 Q334 187 323 157 Z"/></g>
+          <g class="h-part h-display"><path class="h-display" d="M141 151 H228"/><path class="h-display" d="M372 151 H454"/><path class="h-beam" d="M154 177 H232 M368 177 H446"/></g>
+          <g class="h-part h-camera"><circle class="h-camera" cx="470" cy="132" r="13"/><circle cx="470" cy="132" r="5" fill="#080d12"/><circle cx="466" cy="128" r="2" fill="#fff"/></g>
+          <g class="h-part h-sensor"><circle class="h-sensor" cx="130" cy="143" r="5"/><circle class="h-sensor" cx="495" cy="143" r="5"/></g>
+          <path class="h-beam" d="M470 145 C520 190 536 238 520 297"/><path class="h-beam" d="M130 197 C112 238 116 274 137 301"/>
+          <text class="h-caption" x="199" y="270">ARA-01</text><text class="h-subcaption" x="183" y="288">OPTICAL HUD / CONCEPT</text>
+        </svg>`
+      },
+      glove: {
+        name: 'AR GLOVE', type: 'GESTURE INTERFACE',
+        parts: [
+          { name: 'PALM DISPLAY', detail: 'hands-free controls', x: 42, y: 44 },
+          { name: 'FINGER SENSORS', detail: 'gesture position input', x: 26, y: 25 },
+          { name: 'WRIST CAMERA', detail: 'close-range inspection', x: 67, y: 67 },
+          { name: 'POWER MODULE', detail: 'removable low-voltage pack', x: 73, y: 82 },
+        ],
+        svg: `<svg class="holo-svg" viewBox="0 0 600 400" role="img" aria-label="AR glove concept">
+          <g class="h-part h-metal"><path class="h-metal" d="M210 315 Q172 294 176 247 L188 155 Q193 132 209 136 Q220 138 220 157 L220 220 L230 102 Q232 78 248 80 Q263 82 263 104 L258 211 L273 74 Q276 52 291 57 Q305 60 303 83 L296 215 L314 91 Q318 69 332 75 Q346 81 342 103 L329 229 L350 138 Q356 118 369 126 Q380 133 375 153 L355 268 Q347 314 302 332 Z"/></g>
+          <g class="h-part h-display"><rect class="h-display" x="220" y="215" width="91" height="64" rx="12"/><path class="h-beam" d="M234 234 H297 M234 250 H280"/></g>
+          <g class="h-part h-sensor"><circle class="h-sensor" cx="248" cy="93" r="7"/><circle class="h-sensor" cx="288" cy="72" r="7"/><circle class="h-sensor" cx="326" cy="92" r="7"/></g>
+          <g class="h-part h-camera"><circle class="h-camera" cx="356" cy="275" r="14"/><circle cx="356" cy="275" r="5" fill="#080d12"/></g>
+          <g class="h-part h-core"><rect class="h-core" x="230" y="282" width="78" height="38" rx="9"/><circle cx="269" cy="301" r="9" fill="#e0f2fe"/></g>
+          <path class="h-beam" d="M370 274 C442 250 474 213 500 160"/><text class="h-caption" x="192" y="365">MOTION LINK / CONCEPT</text>
+        </svg>`
+      },
+      suit: {
+        name: 'FIELD SUIT', type: 'SENSOR CORE',
+        parts: [
+          { name: 'CHEST CORE', detail: 'power and telemetry hub', x: 39, y: 52 },
+          { name: 'HEAD OPTICS', detail: 'camera and status display', x: 50, y: 22 },
+          { name: 'MOTION SENSORS', detail: 'posture and environment data', x: 68, y: 52 },
+          { name: 'SERVICE PORT', detail: 'safe removable interface', x: 54, y: 84 },
+        ],
+        svg: `<svg class="holo-svg" viewBox="0 0 600 400" role="img" aria-label="Sensor suit concept">
+          <g class="h-part h-metal"><path class="h-metal" d="M228 82 L275 65 H325 L372 82 L418 137 L388 159 L363 135 L378 319 H222 L237 135 L212 159 L182 137 Z"/></g>
+          <g class="h-part h-display"><path class="h-display" d="M264 77 Q300 96 336 77 L329 120 Q300 137 271 120 Z"/><path class="h-beam" d="M278 99 H322"/></g>
+          <g class="h-part h-core"><circle class="h-core" cx="300" cy="184" r="38"/><circle cx="300" cy="184" r="20" fill="#dffcff"/><circle cx="300" cy="184" r="9" fill="#22d3ee"/></g>
+          <g class="h-part h-sensor"><circle class="h-sensor" cx="250" cy="173" r="8"/><circle class="h-sensor" cx="350" cy="173" r="8"/><circle class="h-sensor" cx="250" cy="255" r="8"/><circle class="h-sensor" cx="350" cy="255" r="8"/></g>
+          <g class="h-part h-camera"><rect class="h-camera" x="289" y="53" width="22" height="13" rx="5"/><circle cx="300" cy="59" r="4" fill="#080d12"/></g>
+          <path class="h-beam" d="M300 222 V300 M234 173 H186 M366 173 H414"/><text class="h-caption" x="218" y="353">SENTINEL / CONCEPT</text>
+        </svg>`
+      },
+      custom: {
+        name: 'CUSTOM OBJECT', type: 'AI GENERATED GEOMETRY',
+        parts: [
+          { name: 'AI GEOMETRY', detail: 'shape primitives from the design brief', x: 70, y: 28 },
+          { name: 'DISPLAY CORE', detail: 'hologram rendering layer', x: 38, y: 48 },
+          { name: 'SENSOR ARRAY', detail: 'optional camera and environment input', x: 66, y: 68 },
+          { name: 'POWER / DATA', detail: 'safe conceptual module', x: 36, y: 80 },
+        ],
+        svg: `<svg class="holo-svg" viewBox="0 0 600 400" role="img" aria-label="Custom AI hologram">
+          <g class="h-part h-core"><circle class="h-core" cx="300" cy="190" r="58"/><circle cx="300" cy="190" r="31" fill="#dffcff"/><circle cx="300" cy="190" r="12" fill="#22d3ee"/></g>
+          <g class="h-part h-display"><rect class="h-display" x="215" y="112" width="170" height="156" rx="12"/><path class="h-beam" d="M240 150 H360 M240 170 H330 M240 190 H350"/></g>
+          <g class="h-part h-sensor"><circle class="h-sensor" cx="184" cy="190" r="11"/><circle class="h-sensor" cx="416" cy="190" r="11"/><circle class="h-sensor" cx="300" cy="72" r="11"/></g>
+          <path class="h-beam" d="M184 190 L118 130 M416 190 L484 130 M300 72 V28 M300 248 V350"/>
+          <ellipse class="h-beam" cx="300" cy="190" rx="178" ry="68"/><ellipse class="h-beam" cx="300" cy="190" rx="125" ry="45"/>
+          <text class="h-caption" x="226" y="315">ANY OBJECT / SCENE</text><text class="h-subcaption" x="205" y="333">AI GEOMETRY / CONCEPT</text>
+        </svg>`
+      },
+    };
+    let _holoMode = 'holo';
+    let _holoStream = null;
+    let _holoDets = [];
+
+    const holoOverlay = document.getElementById('holo-overlay');
+    const holoStage = document.getElementById('holo-stage');
+    const holoModel = document.getElementById('holo-model');
+    const holoParts = document.getElementById('holo-parts');
+    const holoCallouts = document.getElementById('holo-callouts');
+    const holoCamWrap = document.getElementById('holo-cam-wrap');
+    const holoCamVideo = document.getElementById('holo-cam-video');
+    const holoCamBoxes = document.getElementById('holo-cam-boxes');
+    const holoStageStatus = document.getElementById('holo-stage-status');
+    const holoReadoutMode = document.getElementById('holo-readout-mode');
+    const holoReadoutStatus = document.getElementById('holo-readout-status');
+
+    function openHoloLab() {
+      holoOverlay.classList.add('open');
+      if (!document.getElementById('holo-project-name').value.trim()) {
+        document.getElementById('holo-project-name').value = _HOLO_MODELS.glasses.name + ' prototype';
+      }
+      if (!document.getElementById('holo-subject').value.trim()) {
+        document.getElementById('holo-subject').value = document.getElementById('holo-model-select').value === 'custom'
+          ? 'custom hologram object' : 'smart glasses with camera';
+      }
+      renderHoloModel();
+      holoStageStatus.textContent = 'HOLO READY / SELECT A PROTOTYPE';
+    }
+
+    function closeHoloLab() {
+      stopHoloCamera();
+      holoOverlay.classList.remove('open');
+      holoCamBoxes.innerHTML = '';
+      _holoDets = [];
+    }
+
+    function renderHoloModel() {
+      const key = document.getElementById('holo-model-select').value;
+      const model = _HOLO_MODELS[key] || _HOLO_MODELS.glasses;
+      holoModel.innerHTML = model.svg;
+      holoParts.innerHTML = '';
+      holoCallouts.innerHTML = '';
+      model.parts.forEach(part => {
+        const li = document.createElement('li');
+        const b = document.createElement('b'); b.textContent = part.name;
+        const span = document.createElement('span'); span.textContent = part.detail;
+        li.append(b, span); holoParts.appendChild(li);
+
+        const label = document.createElement('div');
+        label.className = 'holo-callout';
+        label.style.left = part.x + '%'; label.style.top = part.y + '%';
+        const title = document.createElement('b'); title.textContent = part.name;
+        const desc = document.createElement('i'); desc.textContent = part.detail;
+        label.append(title, desc); holoCallouts.appendChild(label);
+      });
+      const subject = document.getElementById('holo-subject').value.trim();
+      holoStageStatus.textContent = (key === 'custom' && subject ? subject.toUpperCase() : model.name) + ' / ' + model.type;
+      holoReadoutStatus.textContent = 'READY';
+      setHoloMode(_holoMode);
+      setHoloClarity(document.getElementById('holo-clarity').value);
+    }
+
+    function setHoloMode(mode, button) {
+      if (!['holo', 'wireframe', 'exploded', 'clear'].includes(mode)) return;
+      _holoMode = mode;
+      holoStage.classList.remove('mode-holo', 'mode-wireframe', 'mode-exploded', 'mode-clear');
+      holoStage.classList.add('mode-' + mode);
+      document.querySelectorAll('[data-holo-mode]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.holoMode === mode);
+      });
+      holoReadoutMode.textContent = mode.toUpperCase();
+      if (button) button.blur();
+    }
+
+    function setHoloClarity(value) {
+      const n = Math.max(35, Math.min(100, Number(value) || 85));
+      document.getElementById('holo-clarity-value').textContent = Math.round(n) + '%';
+      // Keep the camera readable while increasing contrast on the holographic model.
+      holoModel.style.filter = `contrast(${(0.9 + n / 100 * 0.65).toFixed(2)}) brightness(${(0.86 + n / 100 * 0.34).toFixed(2)})`;
+    }
+
+    async function createHoloProject() {
+      const model = document.getElementById('holo-model-select').value;
+      const subject = document.getElementById('holo-subject').value.trim() || (model === 'custom' ? 'custom hologram object' : _HOLO_MODELS[model].name);
+      const name = document.getElementById('holo-project-name').value.trim() || subject.slice(0, 64);
+      const notes = document.getElementById('holo-notes').value.trim();
+      const clarity = Number(document.getElementById('holo-clarity').value) || 85;
+      const payload = { name, model, subject, mode: _holoMode, clarity, notes };
+      holoReadoutStatus.textContent = 'SAVING…';
+      try {
+        const response = await _authFetch('/api/holo-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Project was not saved');
+        document.getElementById('holo-project-chip').textContent = data.project.id;
+        holoReadoutStatus.textContent = 'CREATED';
+        document.getElementById('holo-foot-status').textContent = 'PROJECT ' + data.project.id + ' / READY';
+        holoStageStatus.textContent = data.project.name.toUpperCase() + ' / VISUAL PROTOTYPE CREATED';
+        toast('◈ Hologram prototype created');
+      } catch (error) {
+        // The 3-D view remains useful offline; make the fallback explicit.
+        const localId = 'LOCAL-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+        document.getElementById('holo-project-chip').textContent = localId;
+        holoReadoutStatus.textContent = 'LOCAL';
+        document.getElementById('holo-foot-status').textContent = 'LOCAL PROTOTYPE / SERVER OFFLINE';
+        holoStageStatus.textContent = 'VISUAL PROTOTYPE READY / SERVER UNAVAILABLE';
+        toast('Hologram view ready locally');
+      }
+    }
+
+    async function openHoloParts() {
+      const popup = window.open('', '_blank');
+      if (!popup) { toast('Allow popups to open the catalog'); return; }
+      popup.document.write('<p style="font-family:Arial;padding:20px">Loading Holo Lab parts catalog…</p>');
+      try {
+        const response = await _authFetch('/api/holo-parts');
+        const data = await response.json();
+        const rows = (data.parts || []).map(part => `<tr><td>${esc(part.name)}</td><td>${esc(part.category)}</td><td>${esc(part.source)}</td><td>~$${part.price}</td><td>${esc(part.supplier)}</td><td>${esc(part.spec)}</td></tr>`).join('');
+        popup.document.open();
+        popup.document.write(`<html><head><title>Holo Lab Parts Catalog</title><style>body{font-family:Arial;padding:20px;color:#111}h1{color:#075985}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #94a3b8;padding:6px;text-align:left}th{background:#cffafe}</style></head><body><h1>HOLO LAB — PARTS CATALOG</h1><p>BUY and MAKE entries for safe prototyping. Verify specifications and suppliers before purchase.</p><table><tr><th>Part</th><th>Category</th><th>Source</th><th>Est.</th><th>Supplier / route</th><th>Spec</th></tr>${rows}</table></body></html>`);
+        popup.document.close(); popup.focus();
+      } catch (_) {
+        popup.document.body.innerHTML = '<p style="font-family:Arial;padding:20px">Could not load the catalog. Use the PC Holo Lab.</p>';
+      }
+    }
+
+    function printHoloBlueprint() {
+      const model = document.getElementById('holo-model-select').value;
+      const subject = document.getElementById('holo-subject').value.trim() || 'custom hologram object';
+      const name = document.getElementById('holo-project-name').value.trim() || subject;
+      const notes = document.getElementById('holo-notes').value.trim();
+      const parts = (_HOLO_MODELS[model]?.parts || []).map(part => `<li><b>${esc(part.name)}</b> — ${esc(part.detail)}</li>`).join('');
+      const popup = window.open('', '_blank', 'noopener,noreferrer');
+      if (!popup) { window.print(); return; }
+      popup.document.write(`<!doctype html><html><head><title>Holo Blueprint — ${esc(name)}</title><style>
+        body{font-family:Arial,sans-serif;color:#111;padding:28px}h1{color:#075985}h2{color:#0e7490;border-bottom:1px solid #94a3b8;padding-bottom:5px}li{margin:8px 0} .note{color:#475569}
+      </style></head><body><h1>HOLO LAB BLUEPRINT</h1><p><b>Project:</b> ${esc(name)}<br><b>Subject:</b> ${esc(subject)}<br><b>Mode:</b> ${esc(_holoMode)}</p><h2>Components</h2><ul>${parts || '<li>AI geometry primitives — see PC report</li>'}</ul><h2>Design brief</h2><p>${esc(notes || 'No additional brief')}</p><p class="note">Software visualization only. Validate voltage, current, heat, optics, battery protection and fit before building.</p></body></html>`);
+      popup.document.close(); popup.focus();
+      setTimeout(() => popup.print(), 250);
+    }
+
+    async function askJarvisHoloDesign() {
+      const model = document.getElementById('holo-model-select').value;
+      const subject = document.getElementById('holo-subject').value.trim() || 'any object or scene';
+      const notes = document.getElementById('holo-notes').value.trim();
+      const mode = _holoMode === 'holo' ? 'exploded' : _holoMode;
+      const text = `Create a complete custom hologram and AI blueprint for: ${subject}. ` +
+        `Use holo_project exactly once with prototype='${model === 'custom' ? 'custom' : model}', ` +
+        `subject='${subject}', display_mode='${mode}'. Generate safe geometry primitives, ` +
+        `3-16 component names, and a concise blueprint. Additional brief: ${notes || 'none'}. ` +
+        `Show the result on the PC monitor and connected dashboard.`;
+      holoStageStatus.textContent = 'REQUEST SENT TO JARVIS / AI DESIGN INCOMING';
+      const enc = _encrypt(text);
+      try {
+        await _authFetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(enc ? { enc } : { text }),
+        });
+        toast('✦ JARVIS is designing the hologram');
+      } catch (_) {
+        holoStageStatus.textContent = 'AI DESIGN UPLINK FAILED';
+      }
+    }
+
+    async function toggleHoloCamera() {
+      if (_holoStream) { stopHoloCamera(); return; }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        holoStageStatus.textContent = 'CAMERA API UNAVAILABLE — USE HTTPS OR LOCALHOST';
+        return;
+      }
+      try {
+        _holoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        holoCamVideo.srcObject = _holoStream;
+        holoCamWrap.classList.add('on');
+        document.getElementById('holo-camera-toggle').textContent = '■ STOP CAMERA FEED';
+        holoStageStatus.textContent = 'OPTICS TEST FEED ACTIVE / READY TO SCAN';
+        holoReadoutStatus.textContent = 'CAMERA ON';
+      } catch (error) {
+        const reason = error && error.name === 'NotAllowedError' ? 'PERMISSION DENIED' : 'CAMERA ERROR';
+        holoStageStatus.textContent = reason + ' / ALLOW CAMERA IN BROWSER';
+        holoReadoutStatus.textContent = 'OFFLINE';
+      }
+    }
+
+    function stopHoloCamera() {
+      if (_holoStream) { _holoStream.getTracks().forEach(track => track.stop()); _holoStream = null; }
+      holoCamVideo.srcObject = null;
+      holoCamWrap.classList.remove('on');
+      document.getElementById('holo-camera-toggle').textContent = '◉ START CAMERA FEED';
+      holoCamBoxes.innerHTML = '';
+      if (holoOverlay.classList.contains('open')) holoReadoutStatus.textContent = 'READY';
+    }
+
+    function _grabHoloFrame(maxSize = 1280, quality = .82) {
+      const vw = holoCamVideo.videoWidth, vh = holoCamVideo.videoHeight;
+      if (!vw || !vh) return null;
+      const scale = Math.min(1, maxSize / Math.max(vw, vh));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vw * scale); canvas.height = Math.round(vh * scale);
+      canvas.getContext('2d').drawImage(holoCamVideo, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', quality).split(',')[1] || null;
+    }
+
+    function _drawHoloDetections() {
+      holoCamBoxes.innerHTML = '';
+      _holoDets.slice(0, 12).forEach(det => {
+        if (!Array.isArray(det.box) || det.box.length !== 4) return;
+        const [ymin, xmin, ymax, xmax] = det.box.map(Number);
+        if (![ymin, xmin, ymax, xmax].every(Number.isFinite)) return;
+        const box = document.createElement('div');
+        box.className = 'holo-detection ' + (det.kind || 'object');
+        box.style.left = Math.max(0, xmin) / 10 + '%';
+        box.style.top = Math.max(0, ymin) / 10 + '%';
+        box.style.width = Math.max(1, xmax - xmin) / 10 + '%';
+        box.style.height = Math.max(1, ymax - ymin) / 10 + '%';
+        const tag = document.createElement('span'); tag.textContent = String(det.label || 'TARGET').slice(0, 32);
+        box.appendChild(tag); holoCamBoxes.appendChild(box);
+      });
+      holoStageStatus.textContent = _holoDets.length
+        ? 'SPACE SCAN COMPLETE / ' + _holoDets.length + ' TARGET(S)'
+        : 'SPACE SCAN COMPLETE / NO TARGETS';
+      holoReadoutStatus.textContent = _holoDets.length ? 'TARGETS ' + _holoDets.length : 'CLEAR';
+    }
+
+    async function _ensureHoloCamera() {
+      if (!_holoStream) await toggleHoloCamera();
+      if (!_holoStream) return false;
+      if (holoCamVideo.readyState >= 2) return true;
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 1800);
+        holoCamVideo.addEventListener('loadeddata', () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+      return holoCamVideo.readyState >= 2;
+    }
+
+    async function holoScanSpace() {
+      const scanBtn = document.getElementById('holo-scan-btn');
+      if (scanBtn.disabled) return;
+      scanBtn.disabled = true; scanBtn.textContent = '⌁ ANALYZING…';
+      holoReadoutStatus.textContent = 'SCANNING';
+      try {
+        if (!await _ensureHoloCamera()) throw new Error('Camera is not ready');
+        const frame = _grabHoloFrame();
+        if (!frame) throw new Error('No video frame');
+        const response = await _authFetch('/api/vision-hud', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ frame }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'HUD analysis failed');
+        _holoDets = Array.isArray(data.detections) ? data.detections : [];
+        _drawHoloDetections();
+      } catch (error) {
+        holoStageStatus.textContent = 'SCAN FAILED / ' + String(error.message || error).toUpperCase().slice(0, 64);
+        holoReadoutStatus.textContent = 'ERROR';
+      } finally {
+        scanBtn.disabled = false; scanBtn.textContent = '⌁ SCAN SPACE';
+      }
+    }
+
+    async function holoAskJarvis() {
+      try {
+        if (!await _ensureHoloCamera()) throw new Error('Camera is not ready');
+        const frame = _grabHoloFrame();
+        if (!frame) throw new Error('No video frame');
+        const notes = document.getElementById('holo-notes').value.trim();
+        const question = notes || 'Describe what the wearable optics can see. Be concise and practical.';
+        holoStageStatus.textContent = 'FRAME SENT TO JARVIS / ANSWER INCOMING';
+        const response = await _authFetch('/api/vision-scan', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ frame, question: question.slice(0, 500) }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Uplink failed');
+        toast('✦ JARVIS is analyzing the optics view');
+      } catch (error) {
+        holoStageStatus.textContent = 'JARVIS UPLINK FAILED / ' + String(error.message || error).toUpperCase().slice(0, 56);
+      }
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && holoOverlay.classList.contains('open')) closeHoloLab();
+    });
+  </script>
+</body>
+</html>
