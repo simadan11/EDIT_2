@@ -64,8 +64,8 @@ def _read_full_config() -> dict:
         return {}
 
 
-_DEFAULT_W, _DEFAULT_H = 980, 700
-_MIN_W,     _MIN_H     = 820, 580
+_DEFAULT_W, _DEFAULT_H = 1240, 760
+_MIN_W,     _MIN_H     = 1000, 620
 _LEFT_W  = 148
 _RIGHT_W = 340
 
@@ -350,276 +350,987 @@ class _SysMetrics:
 
 _metrics = _SysMetrics()
 
-class HudCanvas(QWidget):
-    def __init__(self, face_path: str, assistant_name: str = "J.A.R.V.I.S", parent=None):
+# ════════════════════════════════════════════════════════════════════════════
+#  NEURAL KNOWLEDGE GRID — cinematic 3-D knowledge-network visualisation
+#  (dark space, hundreds of glowing category nodes, hairline links, legend)
+# ════════════════════════════════════════════════════════════════════════════
+
+_NET_CATEGORIES: dict[str, dict] = {
+    "concepts": {"label": "Concepts", "count": 23,  "color": "#ffd23f"},
+    "suites":   {"label": "Suites",   "count": 13,  "color": "#b565ff"},
+    "skills":   {"label": "Skills",   "count": 197, "color": "#2f7bff"},
+    "tools":    {"label": "Tools",    "count": 19,  "color": "#ff5fa2"},
+    "worlds":   {"label": "Worlds",   "count": 15,  "color": "#ff9f2e"},
+    "notes":    {"label": "Notes",    "count": 25,  "color": "#42d97e"},
+    "files":    {"label": "Files",    "count": 192, "color": "#f2f6ff"},
+}
+
+_NET_SINGULAR = {
+    "concepts": "Concept", "suites": "Suite", "skills": "Skill",
+    "tools": "Tool", "worlds": "World", "notes": "Note", "files": "File",
+}
+
+# Big hub nodes — (category, x, y, z, radius, label)
+_NET_HUBS = [
+    ("concepts", -1.75,  0.05,  0.10, 0.205, "AI Workshop"),
+    ("skills",   -2.45, -0.45,  0.25, 0.125, None),
+    ("concepts",  0.05,  0.72,  0.10, 0.100, "Claude"),
+    ("tools",     0.18,  1.42, -0.05, 0.088, "YouTube Channel"),
+    ("worlds",   -0.42,  0.42,  0.12, 0.082, "CiteVue"),
+    ("worlds",    0.48,  0.08, -0.08, 0.088, "GEO"),
+    ("suites",    0.80, -0.36,  0.06, 0.082, "GEO Suite"),
+    ("notes",     1.52,  0.34,  0.02, 0.088, "AI Children's Books"),
+    ("notes",     1.02, -0.60,  0.10, 0.078, "Build Cell Series"),
+    ("notes",     1.95, -0.12, -0.08, 0.080, "Projects"),
+    ("notes",     1.32,  0.92,  0.12, 0.072, "Notes"),
+    ("files",    -0.12,  1.12, -0.06, 0.078, "Video"),
+    ("files",    -0.55,  1.62, -0.18, 0.092, None),
+]
+
+# Preset hub ↔ hub backbone links (indices into _NET_HUBS)
+_NET_HUB_LINKS = [
+    (0, 1), (0, 2), (2, 3), (2, 5), (5, 6), (5, 4), (2, 4),
+    (7, 10), (7, 9), (11, 3), (8, 9), (10, 2), (0, 4), (11, 12), (12, 3),
+]
+
+# Where each category's cloud lives: (fraction, (cx,cy,cz), (σx,σy,σz))
+_NET_LOBES: dict[str, list] = {
+    "skills":   [(0.55, (-1.75,  0.05, 0.10), (1.05, 0.95, 0.62)),
+                 (0.25, (-2.45, -0.45, 0.25), (0.55, 0.60, 0.45)),
+                 (0.20, (-0.85, -1.30, 0.00), (1.05, 0.52, 0.62))],
+    "files":    [(0.62, (-0.15,  1.45, -0.05), (1.00, 0.55, 0.60)),
+                 (0.38, ( 0.85,  0.75,  0.05), (0.85, 0.52, 0.55))],
+    "notes":    [(1.00, ( 1.50,  0.20,  0.05), (0.62, 0.62, 0.42))],
+    "concepts": [(1.00, (-0.30,  0.30,  0.05), (0.95, 0.80, 0.55))],
+    "worlds":   [(1.00, ( 0.20, -0.05,  0.00), (0.75, 0.60, 0.50))],
+    "tools":    [(0.65, ( 0.55,  1.30,  0.00), (0.95, 0.50, 0.55)),
+                 (0.35, ( 0.20,  0.30,  0.10), (0.80, 0.60, 0.45))],
+    "suites":   [(1.00, ( 0.55, -0.55,  0.05), (0.85, 0.55, 0.50))],
+}
+
+
+class _NetNode:
+    __slots__ = ("x", "y", "z", "r", "cat", "label", "hub", "num",
+                 "sx", "sy", "pp", "sr")
+
+    def __init__(self, x, y, z, r, cat, label=None, hub=False, num=0):
+        self.x, self.y, self.z, self.r = x, y, z, r
+        self.cat, self.label, self.hub, self.num = cat, label, hub, num
+        self.sx = self.sy = self.pp = self.sr = 0.0
+
+
+def _build_network() -> tuple[list[_NetNode], list[tuple[int, int]]]:
+    """Deterministic generation of the 484-object knowledge cloud."""
+    rng = random.Random(42)
+    nodes: list[_NetNode] = []
+    for cat, x, y, z, r, label in _NET_HUBS:
+        nodes.append(_NetNode(x, y, z, r, cat, label, hub=True))
+
+    hub_count: dict[str, int] = {}
+    for cat, *_ in _NET_HUBS:
+        hub_count[cat] = hub_count.get(cat, 0) + 1
+
+    def clump(cx, cy, cz, sx, sy, sz):
+        for _ in range(9):                       # resample, don't pile on the walls
+            x, y, z = cx + rng.gauss(0, sx), cy + rng.gauss(0, sy), cz + rng.gauss(0, sz)
+            if -3.25 <= x <= 3.25 and -2.15 <= y <= 2.25 and -1.80 <= z <= 1.80:
+                return x, y, z
+        return (
+            max(-3.25, min(3.25, x)),
+            max(-2.15, min(2.25, y)),
+            max(-1.80, min(1.80, z)),
+        )
+
+    seq = 0
+    for cat, meta in _NET_CATEGORIES.items():
+        n = meta["count"] - hub_count.get(cat, 0)
+        lobes = _NET_LOBES[cat]
+        for _ in range(n):
+            seq += 1
+            pick = rng.random()
+            acc = 0.0
+            anchor, sig = lobes[-1][1], lobes[-1][2]
+            for frac, a, s in lobes:
+                acc += frac
+                if pick <= acc:
+                    anchor, sig = a, s
+                    break
+            x, y, z = clump(*anchor, *sig)
+            if cat in ("skills", "files"):
+                r = rng.uniform(0.016, 0.032)
+            else:
+                r = rng.uniform(0.026, 0.052)
+            nodes.append(_NetNode(x, y, z, r, cat, None, num=seq))
+
+    edges: set[tuple[int, int]] = set()
+
+    def link(a, b):
+        if a != b:
+            edges.add((min(a, b), max(a, b)))
+
+    # backbone
+    for a, b in _NET_HUB_LINKS:
+        link(a, b)
+
+    # every node → nearest hub (the long radial "spokes")
+    n_hub = len(_NET_HUBS)
+    for i in range(n_hub, len(nodes)):
+        nd = nodes[i]
+        best, best_d = 0, 1e9
+        for h in range(n_hub):
+            hb = nodes[h]
+            d = ((nd.x - hb.x) ** 2 + (nd.y - hb.y) ** 2 + (nd.z - hb.z) ** 2)
+            if d < best_d:
+                best, best_d = h, d
+        link(i, best)
+
+    # short local web: nearest neighbours
+    coords = [(nd.x, nd.y, nd.z) for nd in nodes]
+    for i in range(len(nodes)):
+        xi, yi, zi = coords[i]
+        d1 = d2 = 1e9
+        j1 = j2 = -1
+        for j in range(len(nodes)):
+            if j == i:
+                continue
+            xj, yj, zj = coords[j]
+            d = (xi - xj) ** 2 + (yi - yj) ** 2 + (zi - zj) ** 2
+            if d < d1:
+                d2, j2, d1, j1 = d1, j1, d, j
+            elif d < d2:
+                d2, j2 = d, j
+        if j1 >= 0 and d1 < 0.42 ** 2 and rng.random() < 0.60:
+            link(i, j1)
+        if j2 >= 0 and d2 < 0.30 ** 2 and rng.random() < 0.40:
+            link(i, j2)
+
+    # a sprinkle of very long transversal lines
+    for _ in range(45):
+        a, b = rng.randrange(len(nodes)), rng.randrange(len(nodes))
+        xa, ya, za = coords[a]
+        xb, yb, zb = coords[b]
+        if (xa - xb) ** 2 + (ya - yb) ** 2 > 1.8 ** 2:
+            link(a, b)
+
+    return nodes, sorted(edges)
+
+
+class KnowledgeNetCanvas(QWidget):
+    """Full-screen 3-D galaxy of knowledge nodes — the app's new main view.
+
+    Drag to rotate · scroll to zoom · hover a node for its name · click to
+    ping it in the log · click legend entries to dim a category.
+    """
+
+    node_clicked = pyqtSignal(str)
+
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        self.setMinimumSize(300, 300)
+        self.setMouseTracking(True)
+        self.setMinimumSize(360, 300)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self.muted    = False
-        self.speaking = False
-        self.state    = "INITIALISING"
-        self._assistant_name = assistant_name
+        self._nodes, self._edges = _build_network()
+        self._n_edges = len(self._edges)
 
-        self._tick       = 0
-        self._scale      = 1.0
-        self._tgt_scale  = 1.0
-        self._halo       = 55.0
-        self._tgt_halo   = 55.0
-        self._last_t     = time.time()
-        self._scan       = 0.0
-        self._scan2      = 180.0
-        self._rings      = [0.0, 120.0, 240.0]
-        self._pulses: list[float] = [0.0, 50.0, 100.0]
-        self._blink      = True
-        self._blink_tick = 0
-        self._particles: list[list[float]] = []
-        self._face_px: QPixmap | None = None
-        self._load_face(face_path)
+        # per-category pre-tinted assets
+        self._glow: dict[str, QPixmap] = {}
+        self._qcol: dict[str, QColor] = {}
+        for cat, meta in _NET_CATEGORIES.items():
+            self._qcol[cat] = qcol(meta["color"])
+            self._glow[cat] = self._make_glow(meta["color"])
+        self._spr = self._glow["files"].width()          # sprite size (px)
+        # depth-baked sprites: (cat, dia, alpha-bucket) → ready-to-blit pixmap
+        self._spr_cache: dict[tuple, QPixmap] = {}
+
+        # edge colours are a 50/50 mix of the endpoint category colours
+        self._edge_rgb: list[tuple[int, int, int]] = []
+        for a, b in self._edges:
+            ca, cb = self._qcol[self._nodes[a].cat], self._qcol[self._nodes[b].cat]
+            self._edge_rgb.append(((ca.red() + cb.red()) // 2,
+                                   (ca.green() + cb.green()) // 2,
+                                   (ca.blue() + cb.blue()) // 2))
+        self._pen_cache: dict[tuple, QPen] = {}
+
+        # camera
+        self._yaw, self._pitch = 0.42, -0.11
+        self._vyaw = self._vpitch = 0.0
+        self._zoom, self._zoom_tgt = 1.0, 1.0
+        self._drag = False
+        self._drag_pos = None
+        self._last_t = time.time()
+        self._hover = -1
+        self._hover_scr: tuple[float, float, float] | None = None
+        self._dimmed: set[str] = set()                   # legend-muted categories
+        self._legend_rows: list[tuple[QRectF, str]] = []
+        self._bg: QPixmap | None = None
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
-        self._tmr.start(16)
+        self._tmr.start(33)
 
-    def _load_face(self, path: str):
-        try:
-            from PIL import Image, ImageDraw
-            import io
-            img = Image.open(path).convert("RGBA")
-            sz  = min(img.size)
-            img = img.resize((sz, sz), Image.LANCZOS)
-            mk  = Image.new("L", (sz, sz), 0)
-            ImageDraw.Draw(mk).ellipse((2, 2, sz - 2, sz - 2), fill=255)
-            img.putalpha(mk)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            px = QPixmap(); px.loadFromData(buf.getvalue())
-            self._face_px = px
-        except Exception:
-            self._face_px = None
+    # ── assets ───────────────────────────────────────────────────────────
+    @staticmethod
+    def _make_glow(hex_color: str) -> QPixmap:
+        s = 96
+        pm = QPixmap(s, s)
+        pm.fill(Qt.GlobalColor.transparent)
+        g = QRadialGradient(s / 2, s / 2, s / 2)
+        c = qcol(hex_color)
+        g.setColorAt(0.00, QColor(255, 255, 255, 215))
+        g.setColorAt(0.18, QColor(c.red(), c.green(), c.blue(), 150))
+        g.setColorAt(0.45, QColor(c.red(), c.green(), c.blue(), 48))
+        g.setColorAt(1.00, QColor(c.red(), c.green(), c.blue(), 0))
+        pp = QPainter(pm)
+        pp.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pp.setPen(Qt.PenStyle.NoPen)
+        pp.setBrush(QBrush(g))
+        pp.drawRect(0, 0, s, s)          # gradient fades to 0 before the corners
+        pp.end()
+        return pm
 
+    def _sprite(self, cat: str, dia: int) -> QPixmap:
+        """Diameter-bucketed glow sprite — smooth-scaled once, then blitted
+        unscaled every frame (size buckets keep the cache hit-rate high)."""
+        dia = max(4, min(220, (int(dia) + 2) // 4 * 4))
+        key = (cat, dia)
+        pm = self._spr_cache.get(key)
+        if pm is not None:
+            return pm
+        pm = QPixmap(dia, dia)
+        pm.fill(Qt.GlobalColor.transparent)
+        pp = QPainter(pm)
+        pp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        pp.drawPixmap(QRectF(0, 0, dia, dia), self._glow[cat],
+                      QRectF(0, 0, self._spr, self._spr))
+        pp.end()
+        if len(self._spr_cache) > 1200:
+            self._spr_cache.clear()                    # heavy zoom change
+        self._spr_cache[key] = pm
+        return pm
+
+    def resizeEvent(self, _):
+        self._bg = None
+        super().resizeEvent(_)
+
+    def _background(self) -> QPixmap:
+        W, H = self.width(), self.height()
+        pm = QPixmap(W, H)
+        base = QLinearGradient(0, 0, 0, H)
+        base.setColorAt(0.0, QColor("#020509"))
+        base.setColorAt(0.5, QColor("#010307"))
+        base.setColorAt(1.0, QColor("#000204"))
+        pp = QPainter(pm)
+        pp.fillRect(0, 0, W, H, base)
+        # soft deep-blue nebula glows
+        for fx, fy, fr, col, a in [
+            (0.18, 0.30, 0.46, "#0d2846", 90),
+            (0.55, 0.62, 0.42, "#081c33", 70),
+            (0.85, 0.22, 0.34, "#0a2340", 60),
+        ]:
+            gx, gy, gr = W * fx, H * fy, max(W, H) * fr
+            g = QRadialGradient(gx, gy, gr)
+            c = QColor(col)
+            g.setColorAt(0, QColor(c.red(), c.green(), c.blue(), a))
+            g.setColorAt(1, QColor(0, 0, 0, 0))
+            pp.setBrush(QBrush(g))
+            pp.setPen(Qt.PenStyle.NoPen)
+            pp.drawRect(0, 0, W, H)
+        # static star dust
+        rng = random.Random(7)
+        for _ in range(300):
+            x, y = rng.uniform(0, W), rng.uniform(0, H)
+            a = rng.randint(9, 46)
+            pp.setPen(QPen(QColor(140, 190, 230, a), 1))
+            r = rng.choice([0, 0, 0, 1])
+            pp.drawPoint(QPointF(x, y))
+            if r:
+                pp.drawPoint(QPointF(x + 1, y))
+        # vignette
+        vg = QRadialGradient(W / 2, H / 2, max(W, H) * 0.62)
+        vg.setColorAt(0.62, QColor(0, 0, 0, 0))
+        vg.setColorAt(1.0, QColor(0, 0, 0, 150))
+        pp.setBrush(QBrush(vg))
+        pp.setPen(Qt.PenStyle.NoPen)
+        pp.drawRect(0, 0, W, H)
+        pp.end()
+        return pm
+
+    # ── animation ────────────────────────────────────────────────────────
+    def _step(self):
+        if not self.isVisible():
+            self._last_t = time.time()
+            return                                 # camera feed owns the area
+        now = time.time()
+        dt = min(0.1, now - self._last_t)
+        self._last_t = now
+        if not self._drag:
+            # slow galactic drift + inertia after a drag
+            drift = 0.055 if self._hover < 0 else 0.0   # rad/s — pause while reading a node
+            self._yaw += drift * dt
+            if abs(self._vyaw) > 0.0005 or abs(self._vpitch) > 0.0005:
+                self._yaw += self._vyaw
+                self._pitch = max(-1.1, min(1.1, self._pitch + self._vpitch))
+                self._vyaw *= 0.94
+                self._vpitch *= 0.94
+        self._zoom += (self._zoom_tgt - self._zoom) * 0.18
+        self.update()
+
+    # ── picking / interaction ────────────────────────────────────────────
+    def _pick(self, pos) -> int:
+        best, best_d = -1, 20.0 ** 2
+        for i, nd in enumerate(self._nodes):
+            hit_r = max(9.0, nd.sr + 5.0)
+            d = (nd.sx - pos.x()) ** 2 + (nd.sy - pos.y()) ** 2
+            if d < best_d and d <= hit_r ** 2:
+                best, best_d = i, d
+        return best
+
+    def mouseMoveEvent(self, e):
+        pos = e.position()
+        if self._drag and self._drag_pos is not None:
+            dx = pos.x() - self._drag_pos.x()
+            dy = pos.y() - self._drag_pos.y()
+            self._yaw += dx * 0.005
+            self._pitch = max(-1.1, min(1.1, self._pitch + dy * 0.005))
+            self._vyaw = dx * 0.0012
+            self._vpitch = dy * 0.0012
+            self._drag_pos = pos
+        else:
+            idx = self._pick(pos)
+            in_legend = any(r.contains(pos) for r, _ in self._legend_rows)
+            self.setCursor(Qt.CursorShape.PointingHandCursor
+                           if (idx >= 0 or in_legend) else Qt.CursorShape.ArrowCursor)
+            if idx != self._hover:
+                self._hover = idx
+        super().mouseMoveEvent(e)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            pos = e.position()
+            for r, cat in self._legend_rows:
+                if r.contains(pos):
+                    if cat in self._dimmed:
+                        self._dimmed.discard(cat)
+                    else:
+                        self._dimmed.add(cat)
+                    self.update()
+                    return
+            self._drag = True
+            self._drag_pos = pos
+            self._moved = False
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            if self._drag and not self._moved_big():
+                idx = self._pick(e.position())
+                if idx >= 0:
+                    nd = self._nodes[idx]
+                    meta = _NET_CATEGORIES[nd.cat]
+                    self.node_clicked.emit(
+                        nd.label or f"{_NET_SINGULAR[nd.cat]} #{nd.num:03d}")
+            self._drag = False
+            self._drag_pos = None
+        super().mouseReleaseEvent(e)
+
+    def _moved_big(self) -> bool:
+        return abs(self._vyaw) > 0.004 or abs(self._vpitch) > 0.004
+
+    def wheelEvent(self, e):
+        steps = e.angleDelta().y() / 120.0
+        self._zoom_tgt = max(0.55, min(2.6, self._zoom_tgt * (1.14 ** steps)))
+        e.accept()
+
+    # ── frame ────────────────────────────────────────────────────────────
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self._bg is None or self._bg.size() != self.size():
+            self._bg = self._background()
+        p.drawPixmap(0, 0, self._bg)
+
+        W, H = self.width(), self.height()
+        cx, cy = W * 0.47, H * 0.50
+        scale = min(W, H) * 0.128 * self._zoom
+        D = 4.0
+
+        cos_y, sin_y = math.cos(self._yaw), math.sin(self._yaw)
+        cos_p, sin_p = math.cos(self._pitch), math.sin(self._pitch)
+
+        # ── project all nodes ────────────────────────────────────────────
+        order = []
+        for i, nd in enumerate(self._nodes):
+            x1 = nd.x * cos_y + nd.z * sin_y
+            z1 = -nd.x * sin_y + nd.z * cos_y
+            y2 = nd.y * cos_p - z1 * sin_p
+            z2 = nd.y * sin_p + z1 * cos_p
+            pp = D / (D + z2)
+            nd.sx = cx + x1 * scale * pp
+            nd.sy = cy - y2 * scale * pp
+            nd.pp = pp
+            nd.sr = max(0.7, nd.r * scale * pp * 1.8)
+            order.append((z2, i))
+        order.sort(key=lambda t: t[0], reverse=True)     # far → near
+
+        # ── links — hairlines, no AA (drawn every frame, 700+) ──────────
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        hover_cat_linked: set[int] = set()
+        for k, (a, b) in enumerate(self._edges):
+            na, nb = self._nodes[a], self._nodes[b]
+            dim = na.cat in self._dimmed or nb.cat in self._dimmed
+            pavg = (na.pp + nb.pp) * 0.5
+            alpha = int((26 + 62 * max(0.0, pavg - 0.66) / 0.75) * (1.0 if not dim else 0.22))
+            if alpha < 6:
+                continue
+            rgb = self._edge_rgb[k]
+            key = (rgb, alpha // 6)
+            pen = self._pen_cache.get(key)
+            if pen is None:
+                pen = QPen(QColor(rgb[0], rgb[1], rgb[2], min(255, alpha)), 1.0)
+                self._pen_cache[key] = pen
+            p.setPen(pen)
+            p.drawLine(QPointF(na.sx, na.sy), QPointF(nb.sx, nb.sy))
+
+        # ── nodes (far → near) — bucketed sprites, AA off for speed ──────
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        hubs: list[int] = []
+        prev_col: QColor | None = None
+        for z2, i in order:
+            nd = self._nodes[i]
+            dim = nd.cat in self._dimmed
+            if (nd.hub or nd.sr > 6.5) and not dim:
+                hubs.append(i)
+            a = 0.13 + (nd.pp - 0.66) * 1.35
+            if dim:
+                a *= 0.22
+            dia = int(nd.sr * 4.6)
+            if nd.sx < -dia or nd.sx > W + dia or nd.sy < -dia or nd.sy > H + dia:
+                continue
+            p.setOpacity(max(0.05, min(1.0, a)))
+            pm = self._sprite(nd.cat, dia)
+            p.drawPixmap(int(nd.sx - pm.width() / 2), int(nd.sy - pm.height() / 2), pm)
+            # bright solid core
+            col = self._qcol[nd.cat]
+            if col is not prev_col:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(col))
+                prev_col = col
+            cr = max(1.0, nd.sr * 0.42)
+            p.drawEllipse(QPointF(nd.sx, nd.sy), cr, cr)
+        p.setOpacity(1.0)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        for i in hubs:
+            nd = self._nodes[i]
+            cr = max(1.1, nd.sr * 0.42)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(255, 255, 255, 120)))
+            p.drawEllipse(QPointF(nd.sx - cr * 0.35, nd.sy - cr * 0.35),
+                          cr * 0.34, cr * 0.34)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(255, 255, 255, 60), 1))
+            p.drawEllipse(QPointF(nd.sx, nd.sy), cr * 1.06, cr * 1.06)
+
+        # ── hover highlight ──────────────────────────────────────────────
+        self._hover_scr = None
+        if 0 <= self._hover < len(self._nodes):
+            nd = self._nodes[self._hover]
+            hc = self._qcol[nd.cat]
+            # highlight its links
+            p.setPen(QPen(QColor(hc.red(), hc.green(), hc.blue(), 170), 1.3))
+            for a, b in self._edges:
+                if a == self._hover or b == self._hover:
+                    na, nb = self._nodes[a], self._nodes[b]
+                    p.drawLine(QPointF(na.sx, na.sy), QPointF(nb.sx, nb.sy))
+            r = nd.sr + 5
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(hc.red(), hc.green(), hc.blue(), 230), 1.4))
+            p.drawEllipse(QPointF(nd.sx, nd.sy), r, r)
+            self._hover_scr = (nd.sx, nd.sy, r)
+
+        # ── hub labels ───────────────────────────────────────────────────
+        f_lbl = QFont("Courier New", 8, QFont.Weight.Bold)
+        f_lbl.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 108)
+        p.setFont(f_lbl)
+        fm = p.fontMetrics()
+        for nd in self._nodes:
+            if not nd.label:
+                continue
+            if nd.pp < 0.74 and nd.hub:
+                a_txt = int(70 + 200 * (nd.pp - 0.66) / 0.72)
+            else:
+                a_txt = 225
+            a_txt = max(60, min(235, a_txt))
+            if nd.cat in self._dimmed:
+                a_txt = 70
+            tx = nd.sx + nd.sr + 7
+            ty = nd.sy + fm.ascent() * 0.5
+            p.setPen(QColor(0, 0, 0, a_txt))
+            p.drawText(QPointF(tx + 1, ty + 1), nd.label)
+            p.setPen(QColor(214, 232, 244, a_txt))
+            p.drawText(QPointF(tx, ty), nd.label)
+
+        # ── hover name bubble ────────────────────────────────────────────
+        if self._hover_scr is not None:
+            nd = self._nodes[self._hover]
+            hx, hy, hr = self._hover_scr
+            meta = _NET_CATEGORIES[nd.cat]
+            text = nd.label or f"{_NET_SINGULAR[nd.cat]} #{nd.num:03d}"
+            tw = fm.horizontalAdvance(text) + 16
+            th = 20.0
+            bx = min(max(4.0, hx - tw / 2), W - tw - 4)
+            by = max(6.0, hy - hr - th - 8)
+            hc = self._qcol[nd.cat]
+            p.setPen(QPen(QColor(hc.red(), hc.green(), hc.blue(), 190), 1))
+            p.setBrush(QBrush(QColor(2, 16, 25, 235)))
+            p.drawRoundedRect(QRectF(bx, by, tw, th), 4, 4)
+            p.setPen(QColor(230, 244, 252, 245))
+            p.drawText(QRectF(bx, by, tw, th), Qt.AlignmentFlag.AlignCenter, text)
+
+        self._paint_legend(p, W)
+        self._paint_caption(p, W, H)
+        p.end()
+
+    # ── legend (top-right) ───────────────────────────────────────────────
+    def _paint_legend(self, p: QPainter, W: int):
+        rows = list(_NET_CATEGORIES.items())
+        bw, bh = 168.0, 16.0 + len(rows) * 21.0
+        x0, y0 = W - bw - 16.0, 16.0
+        p.setPen(QPen(qcol(C.BORDER, 170), 1))
+        p.setBrush(QBrush(QColor(1, 9, 14, 168)))
+        p.drawRoundedRect(QRectF(x0, y0, bw, bh), 6, 6)
+
+        f_name = QFont("Courier New", 8, QFont.Weight.Bold)
+        f_name.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 112)
+        p.setFont(f_name)
+        fm = p.fontMetrics()
+        self._legend_rows = []
+        for i, (cat, meta) in enumerate(rows):
+            ry = y0 + 13.0 + i * 21.0
+            self._legend_rows.append((QRectF(x0, ry - 8, bw, 20), cat))
+            dim = cat in self._dimmed
+            a_main = 90 if dim else 255
+            c = QColor(meta["color"])
+            # dot + halo
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), 60 if not dim else 25)))
+            p.drawEllipse(QPointF(x0 + 15, ry + 4), 6.5, 6.5)
+            p.setBrush(QBrush(QColor(c.red(), c.green(), c.blue(), a_main)))
+            p.drawEllipse(QPointF(x0 + 15, ry + 4), 3.6, 3.6)
+            # name
+            p.setPen(QColor(200, 226, 240, 120 if dim else 235))
+            p.drawText(QPointF(x0 + 28, ry + 7), meta["label"])
+            # count (right aligned)
+            cnt = str(meta["count"])
+            cw_ = fm.horizontalAdvance(cnt)
+            p.setPen(QColor(126, 170, 190, 110 if dim else 225))
+            p.drawText(QPointF(x0 + bw - 12 - cw_, ry + 7), cnt)
+            if dim:
+                p.setPen(QPen(QColor(110, 130, 145, 200), 1))
+                p.drawLine(QPointF(x0 + 26, ry + 5), QPointF(x0 + 120, ry + 5))
+
+    # ── corner captions ──────────────────────────────────────────────────
+    def _paint_caption(self, p: QPainter, W: int, H: int):
+        total = sum(m["count"] for m in _NET_CATEGORIES.values())
+        f = QFont("Courier New", 7, QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 150)
+        p.setFont(f)
+        p.setPen(qcol(C.PRI, 110))
+        p.drawText(18, H - 26, f"◈ NEURAL KNOWLEDGE GRID — {total} OBJECTS · {self._n_edges} LINKS")
+        p.setPen(qcol(C.TEXT_DIM, 90))
+        hint = "DRAG ROTATE · SCROLL ZOOM"
+        p.drawText(W - 18 - p.fontMetrics().horizontalAdvance(hint), H - 26, hint)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  J.A.R.V.I.S. REACTOR PANEL — right-side circular voice-interface column
+# ════════════════════════════════════════════════════════════════════════════
+
+def _model_badge() -> str:
+    """Short model name for the panel pill (config override: model_badge)."""
+    cfg = _read_full_config()
+    over = (cfg.get("model_badge") or "").strip()
+    if over:
+        return over.upper()[:26]
+    raw = (cfg.get("live_model") or "").strip().split("/")[-1]
+    tok = raw.split("-") if raw else ["gemini", "2.5", "flash"]
+    if tok and tok[0].startswith("gemini"):
+        return "-".join(tok[:3]).upper()
+    return (raw or "GEMINI-2.5-FLASH").upper()[:26]
+
+
+class JarvisPanel(QWidget):
+    """Right-hand circular AI console: reactor ring + LISTENING state +
+    wake-word hint + model badge. Keeps the old HudCanvas attribute API
+    (``state`` / ``speaking`` / ``muted`` / ``_assistant_name``) so the rest
+    of the app drives it unchanged."""
+
+    def __init__(self, face_path: str, assistant_name: str = "J.A.R.V.I.S", parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setMinimumWidth(280)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+
+        self.muted: bool = False
+        self.speaking: bool = False
+        self.state: str = "INITIALISING"
+        self._assistant_name = assistant_name
+        self._face_path = face_path                  # kept for API parity
+        self._model = _model_badge()
+        self._dotted_cache: tuple[str, str] = ("", "")
+
+        self._tick = 0
+        self._scale, self._tgt_scale = 1.0, 1.0
+        self._halo, self._tgt_halo = 55.0, 55.0
+        self._last_t = time.time()
+        self._dial = 0.0
+        self._scan, self._scan2 = 0.0, 180.0
+        self._rings = [0.0, 120.0, 240.0]
+        self._pulses: list[float] = [0.0, 60.0, 120.0]
+        self._blink = True
+        self._blink_tick = 0
+
+        self._tmr = QTimer(self)
+        self._tmr.timeout.connect(self._step)
+        self._tmr.start(33)
+
+    # ── helpers ──────────────────────────────────────────────────────────
+    def _dotted_name(self) -> str:
+        if self._dotted_cache[0] != self._assistant_name:
+            n = self._assistant_name.replace(".", "").strip() or "JARVIS"
+            dotted = ".".join(n) + "."
+            self._dotted_cache = (self._assistant_name, dotted)
+        return self._dotted_cache[1]
+
+    def _wake_hint(self) -> str:
+        n = (self._assistant_name or "jarvis").replace(".", "").strip().lower() or "jarvis"
+        return f'say "{n}..."'
+
+    # ── animation ────────────────────────────────────────────────────────
     def _step(self):
         self._tick += 1
         now = time.time()
         if now - self._last_t > (0.12 if self.speaking else 0.5):
             if self.speaking:
-                self._tgt_scale = random.uniform(1.06, 1.14)
-                self._tgt_halo  = random.uniform(145, 190)
+                self._tgt_scale = random.uniform(1.05, 1.12)
+                self._tgt_halo = random.uniform(130, 175)
             elif self.muted:
                 self._tgt_scale = random.uniform(0.998, 1.002)
-                self._tgt_halo  = random.uniform(15, 28)
+                self._tgt_halo = random.uniform(14, 26)
             else:
-                self._tgt_scale = random.uniform(1.001, 1.008)
-                self._tgt_halo  = random.uniform(48, 68)
+                self._tgt_scale = random.uniform(1.001, 1.007)
+                self._tgt_halo = random.uniform(46, 64)
             self._last_t = now
 
         sp = 0.38 if self.speaking else 0.15
         self._scale += (self._tgt_scale - self._scale) * sp
-        self._halo  += (self._tgt_halo  - self._halo)  * sp
+        self._halo += (self._tgt_halo - self._halo) * sp
 
-        speeds = [1.3, -0.9, 2.0] if self.speaking else [0.55, -0.35, 0.9]
+        mul = 2.6 if self.speaking else 1.0
+        self._dial = (self._dial + (0.14 if self.speaking else 0.035)) % 360
+        self._scan = (self._scan + 2.6 * mul) % 360
+        self._scan2 = (self._scan2 - 1.7 * mul) % 360
+        speeds = [1.2 * mul, -0.8 * mul, 1.8 * mul]
         for i, spd in enumerate(speeds):
             self._rings[i] = (self._rings[i] + spd) % 360
 
-        self._scan  = (self._scan  + (3.0 if self.speaking else 1.3)) % 360
-        self._scan2 = (self._scan2 + (-2.0 if self.speaking else -0.75)) % 360
-
-        fw  = min(self.width(), self.height())
-        lim = fw * 0.74
-        spd = 4.2 if self.speaking else 2.0
-        self._pulses = [r + spd for r in self._pulses if r + spd < lim]
-        if len(self._pulses) < 3 and random.random() < (0.07 if self.speaking else 0.025):
+        w = self.width()
+        lim = w * 0.52
+        self._pulses = [r + (4.0 if self.speaking else 1.9) for r in self._pulses if r < lim]
+        if len(self._pulses) < 3 and random.random() < (0.09 if self.speaking else 0.03):
             self._pulses.append(0.0)
 
-        if self.speaking and random.random() < 0.28:
-            cx, cy = self.width() / 2, self.height() / 2
-            ang = random.uniform(0, 2 * math.pi)
-            r_s = fw * 0.28
-            self._particles.append([
-                cx + math.cos(ang) * r_s, cy + math.sin(ang) * r_s,
-                math.cos(ang) * random.uniform(0.9, 2.4),
-                math.sin(ang) * random.uniform(0.9, 2.4) - 0.4, 1.0,
-            ])
-        self._particles = [
-            [p[0]+p[2], p[1]+p[3], p[2]*0.97, p[3]*0.97, p[4]-0.028]
-            for p in self._particles if p[4] > 0
-        ]
-
         self._blink_tick += 1
-        if self._blink_tick >= 38:
+        if self._blink_tick >= 34:
             self._blink = not self._blink
             self._blink_tick = 0
         self.update()
 
+    # ── frame ────────────────────────────────────────────────────────────
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), qcol(C.BG))
-
         W, H = self.width(), self.height()
-        cx, cy = W / 2, H / 2
-        fw = min(W, H)
 
-        # grid dots
-        p.setPen(QPen(qcol(C.PRI_GHO), 1))
-        for x in range(0, W, 48):
-            for y in range(0, H, 48):
-                p.drawPoint(x, y)
+        pri = qcol(C.MUTED_C if self.muted else C.PRI)
+        halo_a = max(0, min(255, int(self._halo)))
 
-        r_face = fw * 0.31
+        # background: near-black with a faint cyan zenith + left hairline
+        bg = QLinearGradient(0, 0, 0, H)
+        bg.setColorAt(0.0, QColor("#010a11"))
+        bg.setColorAt(0.45, QColor("#000408"))
+        bg.setColorAt(1.0, QColor("#000205"))
+        p.fillRect(self.rect(), QBrush(bg))
+        zen = QRadialGradient(W / 2, H * 0.06, W * 0.75)
+        zen.setColorAt(0, QColor(pri.red(), pri.green(), pri.blue(), 26))
+        zen.setColorAt(1, QColor(0, 0, 0, 0))
+        p.fillRect(self.rect(), QBrush(zen))
+        p.setPen(QPen(qcol(C.BORDER, 200), 1))
+        p.drawLine(0, 0, 0, H)
+        p.setPen(QPen(qcol(C.PRI, 46), 1))
+        p.drawLine(1, 0, 1, H)
 
-        # ── solid (never transparent) core disc behind the orb ────────────
-        r_solid = r_face * 1.12 * self._scale
-        disc = QRadialGradient(cx, cy - r_solid * 0.35, r_solid * 1.7)
-        disc.setColorAt(0.0, qcol(C.PANEL2, 255))
-        disc.setColorAt(0.6, qcol(C.DARK, 255))
-        disc.setColorAt(1.0, qcol(C.BG, 255))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(disc))
-        p.drawEllipse(QRectF(cx - r_solid, cy - r_solid, r_solid * 2, r_solid * 2))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(qcol(C.MUTED_C if self.muted else C.PRI, 220), 1.6))
-        p.drawEllipse(QRectF(cx - r_solid, cy - r_solid, r_solid * 2, r_solid * 2))
+        self._paint_reactor(p, W, pri)
+        self._paint_status(p, W)
+        self._paint_badge(p, W)
+        self._paint_wave(p, W, H)
 
-        # halo glow
-        for i in range(10):
-            r   = r_face * (1.8 - i * 0.08)
-            frc = 1.0 - i / 10
-            a   = max(0, min(255, int(self._halo * 0.085 * frc)))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        # bottom mark
+        f = QFont("Courier New", 6, QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 260)
+        p.setFont(f)
+        p.setPen(qcol(C.TEXT_DIM, 70))
+        p.drawText(QRectF(0, H - 16, W, 12), Qt.AlignmentFlag.AlignCenter,
+                   "M A R K   X L I X")
+        p.end()
 
-        # pulse rings
+    # ── the circular reactor ─────────────────────────────────────────────
+    def _paint_reactor(self, p: QPainter, W: int, pri: QColor):
+        R = min(W * 0.415, 136.0)
+        cx, cy = W / 2, 30 + R
+        halo_a = max(0, min(255, int(self._halo)))
+
+        # pulse rings travelling outward
         for pr in self._pulses:
-            a   = max(0, int(230 * (1.0 - pr / (fw * 0.74))))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - pr, cy - pr, pr * 2, pr * 2))
+            rr = R * (0.98 + pr / max(1.0, W * 0.52) * 0.30)
+            a = max(0, int(150 * (1.0 - pr / max(1.0, W * 0.52))))
+            p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), a), 1.3))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            r2 = R + pr * 0.26
+            p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
 
-        # spinning arc rings
-        for idx, (r_frac, w_r, arc_l, gap) in enumerate(
-            [(0.48, 3, 115, 78), (0.40, 2, 78, 55), (0.32, 1, 56, 40)]
-        ):
-            ring_r = fw * r_frac
-            base   = self._rings[idx]
-            a_val  = max(0, min(255, int(self._halo * (1.0 - idx * 0.18))))
-            col    = qcol(C.MUTED_C if self.muted else C.PRI, a_val)
-            p.setPen(QPen(col, w_r)); p.setBrush(Qt.BrushStyle.NoBrush)
-            angle = base
-            rect  = QRectF(cx - ring_r, cy - ring_r, ring_r * 2, ring_r * 2)
-            while angle < base + 360:
-                p.drawArc(rect, int(angle * 16), int(arc_l * 16))
-                angle += arc_l + gap
-
-        # scanners
-        sr = fw * 0.50
-        sa = min(255, int(self._halo * 1.5))
-        ex = 75 if self.speaking else 44
-        p.setPen(QPen(qcol(C.MUTED_C if self.muted else C.PRI, sa), 2.5))
+        # outer tick dial — cyan scale with an amber sector (lower-right)
         p.setBrush(Qt.BrushStyle.NoBrush)
+        tick_out, tick_in = R, R - 7
+        for deg in range(0, 360, 5):
+            ang = math.radians(deg + self._dial)
+            long_t = (deg % 30) == 0
+            tin = tick_in - (6 if long_t else 0)
+            amber = (deg + int(self._dial)) % 360 in range(300, 360) or (250 <= (deg + int(self._dial)) % 360 < 300 and long_t)
+            if amber:
+                col = qcol(C.ACC2, 235)
+            else:
+                col = QColor(pri.red(), pri.green(), pri.blue(),
+                             150 + (80 if long_t else 0))
+            p.setPen(QPen(col, 1.6 if long_t else 1.1))
+            p.drawLine(QPointF(cx + tick_out * math.cos(ang), cy - tick_out * math.sin(ang)),
+                       QPointF(cx + tin * math.cos(ang), cy - tin * math.sin(ang)))
+
+        # tick ring baseline circle
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 60), 1))
+        r0 = R - 1
+        p.drawEllipse(QRectF(cx - r0, cy - r0, r0 * 2, r0 * 2))
+
+        # rotating scanner arcs
+        sr = R * 0.92
+        sa = min(255, 90 + halo_a)
         srect = QRectF(cx - sr, cy - sr, sr * 2, sr * 2)
-        p.drawArc(srect, int(self._scan * 16), int(ex * 16))
-        p.setPen(QPen(qcol(C.ACC, sa // 2), 1.5))
-        p.drawArc(srect, int(self._scan2 * 16), int(ex * 16))
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), sa), 2.2))
+        p.drawArc(srect, int(self._scan * 16), int(64 * 16))
+        p.setPen(QPen(qcol(C.ACC, sa // 2), 1.4))
+        p.drawArc(srect, int(self._scan2 * 16), int(48 * 16))
 
-        # tick marks
-        t_out, t_in = fw * 0.497, fw * 0.474
-        p.setPen(QPen(qcol(C.PRI, 140), 1))
-        for deg in range(0, 360, 10):
-            rad = math.radians(deg)
-            inn = t_in if deg % 30 == 0 else t_in + 6
-            p.drawLine(
-                QPointF(cx + t_out * math.cos(rad), cy - t_out * math.sin(rad)),
-                QPointF(cx + inn  * math.cos(rad), cy - inn  * math.sin(rad)),
-            )
+        # concentric thin circles
+        for frac, a in [(0.80, 80), (0.66, 60)]:
+            rr = R * frac
+            p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(),
+                                 min(255, a + halo_a // 3)), 1))
+            p.drawEllipse(QRectF(cx - rr, cy - rr, rr * 2, rr * 2))
 
-        # crosshair
-        ch_r, gap_h = fw * 0.51, fw * 0.16
-        p.setPen(QPen(qcol(C.PRI, int(self._halo * 0.5)), 1))
-        p.drawLine(QPointF(cx - ch_r, cy), QPointF(cx - gap_h, cy))
-        p.drawLine(QPointF(cx + gap_h, cy), QPointF(cx + ch_r, cy))
-        p.drawLine(QPointF(cx, cy - ch_r), QPointF(cx, cy - gap_h))
-        p.drawLine(QPointF(cx, cy + gap_h), QPointF(cx, cy + ch_r))
+        # broken decorative arc segments on the 0.80 ring
+        rr = R * 0.80
+        rect = QRectF(cx - rr, cy - rr, rr * 2, rr * 2)
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), min(255, 60 + halo_a)), 2.4))
+        base = self._rings[0]
+        a_cursor = base
+        while a_cursor < base + 360:
+            p.drawArc(rect, int(a_cursor * 16), int(52 * 16))
+            a_cursor += 52 + 68
 
-        # corner brackets
-        bl = 24
-        bc = qcol(C.PRI, 210)
-        hl, hr = cx - fw // 2, cx + fw // 2
-        ht, hb = cy - fw // 2, cy + fw // 2
-        p.setPen(QPen(bc, 2))
-        for bx, by, dx, dy in [(hl,ht,1,1),(hr,ht,-1,1),(hl,hb,1,-1),(hr,hb,-1,-1)]:
-            p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
-            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
+        # radial divisions
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 34), 1))
+        for deg in range(0, 360, 30):
+            ang = math.radians(deg)
+            p.drawLine(QPointF(cx + R * 0.68 * math.cos(ang), cy - R * 0.68 * math.sin(ang)),
+                       QPointF(cx + R * 0.79 * math.cos(ang), cy - R * 0.79 * math.sin(ang)))
 
-        # face
-        if self._face_px:
-            fsz    = int(fw * 0.62 * self._scale)
-            scaled = self._face_px.scaled(
-                fsz, fsz,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            p.drawPixmap(int(cx - fsz / 2), int(cy - fsz / 2), scaled)
-        else:
-            orb_r = int(fw * 0.27 * self._scale)
-            oc    = (200, 0, 50) if self.muted else (0, 60, 110)
-            for i in range(8, 0, -1):
-                r2  = int(orb_r * i / 8)
-                frc = i / 8
-                p.setBrush(QBrush(QColor(int(oc[0]*frc), int(oc[1]*frc), int(oc[2]*frc), 255)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
-            p.setPen(QPen(qcol(C.PRI, min(255, int(self._halo * 2))), 1))
-            p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
-            p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, self._assistant_name)
-
-        # particles
-        for pt in self._particles:
-            a = max(0, min(255, int(pt[4] * 255)))
+        # glowing marker dots riding the rings
+        for deg, rr_frac, warm in [(24, 0.80, False), (140, 0.80, False),
+                                   (205, 0.66, False), (318, 0.80, False),
+                                   (262, 0.92, True)]:
+            ang = math.radians(deg + (self._rings[1] if rr_frac == 0.66 else 0))
+            dx, dy = cx + R * rr_frac * math.cos(ang), cy - R * rr_frac * math.sin(ang)
+            dc = qcol(C.ACC2, 230) if warm else QColor(pri.red(), pri.green(), pri.blue(), 220)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(qcol(C.PRI, a)))
-            p.drawEllipse(QPointF(pt[0], pt[1]), 2.5, 2.5)
+            p.setBrush(QBrush(QColor(dc.red(), dc.green(), dc.blue(), 60)))
+            p.drawEllipse(QPointF(dx, dy), 5.0, 5.0)
+            p.setBrush(QBrush(dc))
+            p.drawEllipse(QPointF(dx, dy), 2.1, 2.1)
 
-        # status text
-        sy = cy + fw * 0.40
+        # core disc (breathing)
+        r_in = R * 0.565 * self._scale
+        core = QRadialGradient(cx, cy - r_in * 0.30, r_in * 1.55)
+        core.setColorAt(0.0, QColor("#03141f"))
+        core.setColorAt(0.65, QColor("#000b12"))
+        core.setColorAt(1.0, QColor("#00040a"))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(core))
+        p.drawEllipse(QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2))
+        # rim + halo
+        for i in range(7):
+            rr = r_in * (1.34 - i * 0.05)
+            a = max(0, min(255, int(self._halo * 0.07 * (1.0 - i / 7))))
+            p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), a), 1.4))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(QRectF(cx - rr, cy - rr, rr * 2, rr * 2))
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(),
+                             min(255, 150 + halo_a // 2)), 1.7))
+        p.drawEllipse(QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2))
+
+        # centre name — dotted, letter-spaced, glowing
+        name = self._dotted_name()
+        # fit inside the core: width ≈ fsz · len · 0.60 · spacing(1.26)
+        fsz = max(9, min(28, int(1.46 * r_in / max(3, len(name)) / 0.76)))
+        f = QFont("Courier New", fsz, QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 126)
+        p.setFont(f)
+        p.setPen(QColor(pri.red(), pri.green(), pri.blue(), 70))
+        p.drawText(QRectF(cx - r_in, cy - r_in * 0.30, r_in * 2, r_in * 0.6),
+                   Qt.AlignmentFlag.AlignCenter, name)
+        p.setPen(QColor(200, 251, 255, 245))
+        p.drawText(QRectF(cx - r_in, cy - r_in * 0.30, r_in * 2, r_in * 0.6),
+                   Qt.AlignmentFlag.AlignCenter, name)
+
+    # ── status line ──────────────────────────────────────────────────────
+    def _status_style(self) -> tuple[str, QColor]:
         if self.muted:
-            txt, col = "⊘  MUTED",     qcol(C.MUTED_C)
-        elif self.speaking:
-            txt, col = "●  SPEAKING",  qcol(C.ACC)
-        elif self.state == "THINKING":
-            sym = "◈" if self._blink else "◇"
-            txt, col = f"{sym}  THINKING",   qcol(C.ACC2)
-        elif self.state == "PROCESSING":
-            sym = "▷" if self._blink else "▶"
-            txt, col = f"{sym}  PROCESSING", qcol(C.ACC2)
-        elif self.state == "LISTENING":
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  LISTENING",  qcol(C.GREEN)
-        else:
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  {self.state}", qcol(C.PRI)
+            return "MUTED", qcol(C.MUTED_C)
+        if self.speaking:
+            return "SPEAKING", qcol(C.PRI)
+        st = (self.state or "").upper()
+        if st == "THINKING":
+            return "THINKING", qcol(C.ACC2)
+        if st == "PROCESSING":
+            return "PROCESSING", qcol(C.ACC2)
+        if st == "LISTENING":
+            return "LISTENING", qcol(C.PRI)
+        return st or "STANDBY", qcol(C.TEXT_MED)
 
-        p.setPen(QPen(col, 1))
-        p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
+    def _paint_status(self, p: QPainter, W: int):
+        R = min(W * 0.415, 136.0)
+        y = 30 + R * 2 + 24
+        txt, col = self._status_style()
 
-        # waveform
-        wy = sy + 30
-        N, bw = 36, 8
-        wx0 = (W - N * bw) / 2
-        for i in range(N):
+        f = QFont("Courier New", 13, QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 205)
+        p.setFont(f)
+        fm = p.fontMetrics()
+        tw = fm.horizontalAdvance(txt)
+        dot_r = 5.0
+        gap = 12.0
+        x0 = (W - (dot_r * 2 + gap + tw)) / 2
+        cy_ = y + fm.ascent() * 0.62
+
+        # glowing status dot
+        pulse = 1.0 + (0.35 * math.sin(self._tick * 0.22) if not self.muted else 0.0)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(col.red(), col.green(), col.blue(), 70)))
+        p.drawEllipse(QPointF(x0 + dot_r, cy_), dot_r * 2.1 * pulse, dot_r * 2.1 * pulse)
+        p.setBrush(QBrush(QColor(col.red(), col.green(), col.blue(),
+                                 255 if (self._blink or self.speaking) else 170)))
+        p.drawEllipse(QPointF(x0 + dot_r, cy_), dot_r, dot_r)
+
+        # status text with soft glow
+        tx = x0 + dot_r * 2 + gap
+        p.setPen(QColor(col.red(), col.green(), col.blue(), 60))
+        p.drawText(QPointF(tx, y + fm.ascent()), txt)
+        p.setPen(QColor(col.red(), col.green(), col.blue(), 248))
+        p.drawText(QPointF(tx, y + fm.ascent()), txt)
+
+        # equalizer sliver under the state (voice feeling)
+        eq_y = y + 24
+        n, bw = 26, 7
+        ex0 = (W - n * bw) / 2
+        for i in range(n):
             if self.muted:
-                hgt, cl = 2, qcol(C.MUTED_C)
+                hgt, bc = 2, qcol(C.MUTED_C, 120)
             elif self.speaking:
-                hgt = random.randint(3, 20)
-                cl  = qcol(C.PRI) if hgt > 12 else qcol(C.PRI_DIM)
+                hgt = random.randint(3, 15)
+                bc = QColor(col.red(), col.green(), col.blue(), 230 if hgt > 9 else 130)
+            elif self.state == "LISTENING":
+                hgt = int(3 + 1.6 * math.sin(self._tick * 0.14 + i * 0.55))
+                bc = qcol(C.BORDER_B, 170)
+            else:
+                hgt = int(2.5 + 1.2 * math.sin(self._tick * 0.06 + i * 0.5))
+                bc = qcol(C.BORDER, 150)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(bc))
+            p.fillRect(QRectF(ex0 + i * bw, eq_y + 14 - hgt, bw - 3, hgt), QBrush(bc))
+
+        # wake-word hint
+        f2 = QFont("Courier New", 8)
+        f2.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 130)
+        p.setFont(f2)
+        p.setPen(qcol(C.TEXT_DIM, 200))
+        p.drawText(QRectF(0, eq_y + 26, W, 16), Qt.AlignmentFlag.AlignCenter,
+                   self._wake_hint())
+
+    # ── model badge pill ─────────────────────────────────────────────────
+    def _paint_badge(self, p: QPainter, W: int):
+        R = min(W * 0.415, 136.0)
+        y = 30 + R * 2 + 24 + 26 + 38
+
+        # hairline divider
+        p.setPen(QPen(qcol(C.BORDER, 160), 1))
+        p.drawLine(QPointF(W * 0.18, y), QPointF(W * 0.82, y))
+        y += 16
+
+        f = QFont("Courier New", 8, QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 135)
+        p.setFont(f)
+        fm = p.fontMetrics()
+        txt = self._model
+        pw = fm.horizontalAdvance(txt) + 52
+        ph = 26.0
+        x0 = (W - pw) / 2
+        pri = qcol(C.MUTED_C if self.muted else C.PRI)
+
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 150), 1))
+        p.setBrush(QBrush(QColor(2, 18, 27, 235)))
+        p.drawRoundedRect(QRectF(x0, y, pw, ph), ph / 2, ph / 2)
+
+        # chip glyph
+        gx, gy = x0 + 14, y + ph / 2
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 220), 1.2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(gx - 4, gy - 4, 8, 8), 1.2, 1.2)
+        for dx, dy in [(-4, -7), (0, -7), (4, -7), (-4, 7), (0, 7), (4, 7)]:
+            p.drawLine(QPointF(gx + dx, gy + (-4 if dy < 0 else 4)),
+                       QPointF(gx + dx, gy + dy))
+        p.drawPoint(QPointF(gx, gy))
+
+        p.setPen(QColor(pri.red(), pri.green(), pri.blue(), 240))
+        p.drawText(QPointF(x0 + 30, y + ph / 2 + fm.ascent() * 0.42), txt)
+
+    # ── bottom waveform strip ────────────────────────────────────────────
+    def _paint_wave(self, p: QPainter, W: int, H: int):
+        wy = H - 46
+        n, bw = 44, 6
+        x0 = (W - n * bw) / 2
+        for i in range(n):
+            if self.muted:
+                hgt, cl = 2, qcol(C.MUTED_C, 140)
+            elif self.speaking:
+                hgt = random.randint(3, 22)
+                cl = qcol(C.PRI, 235) if hgt > 13 else qcol(C.PRI_DIM, 190)
             else:
                 hgt = int(3 + 2 * math.sin(self._tick * 0.09 + i * 0.6))
-                cl  = qcol(C.BORDER_B)
-            p.fillRect(QRectF(wx0 + i * bw, wy + 20 - hgt, bw - 1, hgt), cl)
+                cl = qcol(C.BORDER_B, 170)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(cl))
+            p.drawRect(QRectF(x0 + i * bw, wy + 22 - hgt, bw - 2, hgt))
+
 
 class _GearButton(QWidget):
     """Floating animated settings button — the only chrome besides the orb."""
@@ -3144,9 +3855,11 @@ class MainWindow(QMainWindow):
         self._right_panel = self._build_right_panel()
         self._header.hide()
 
-        # Center: HUD (the orb) + optional content panel
-        self.hud = HudCanvas(face_path, _display)
-        self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Center: 3-D neural knowledge grid — right: J.A.R.V.I.S. reactor
+        self.net = KnowledgeNetCanvas(self)
+        self.hud = JarvisPanel(face_path, _display, self)
+        self.hud.setFixedWidth(_RIGHT_W)
+        self.net.node_clicked.connect(self._on_net_node)
         self._content_panel = self._build_content_panel()
 
         # Live camera container — replaces HUD when camera stream is active
@@ -3186,7 +3899,7 @@ class MainWindow(QMainWindow):
 
         # Stack: 0 = animated HUD (orb), 1 = live camera
         self._hud_cam_stack = QStackedWidget()
-        self._hud_cam_stack.addWidget(self.hud)
+        self._hud_cam_stack.addWidget(self.net)
         self._hud_cam_stack.addWidget(_cam_cont)
 
         self._center_split = QSplitter(Qt.Orientation.Vertical)
@@ -3204,7 +3917,14 @@ class MainWindow(QMainWindow):
         self._center_split.setStretchFactor(0, 3)
         self._center_split.setStretchFactor(1, 1)
         self._center_split.setCollapsible(0, False)
-        root.addWidget(self._center_split, stretch=1)
+
+        # Main row: knowledge grid (flex) | J.A.R.V.I.S. panel (fixed)
+        _row = QHBoxLayout()
+        _row.setContentsMargins(0, 0, 0, 0)
+        _row.setSpacing(0)
+        _row.addWidget(self._center_split, stretch=1)
+        _row.addWidget(self.hud)
+        root.addLayout(_row, stretch=1)
 
         # Floating settings (gear) button — the ONLY chrome on screen
         self._gear_btn = _GearButton(central)
@@ -5598,6 +6318,9 @@ class MainWindow(QMainWindow):
         self._log.append_log(f"You: {txt}")
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
+
+    def _on_net_node(self, label: str) -> None:
+        self._log.append_log(f"◈ GRID: {label}")
 
     def _apply_state(self, state: str):
         self.hud.state    = state
