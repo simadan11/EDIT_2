@@ -1,0 +1,63 @@
+{
+    "skills": [
+        {
+            "name": "crypto_price",
+            "description": "Fetches current cryptocurrency price in USD (e.g. bitcoin, ethereum, solana). Created as a permanent custom skill.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "coin": {
+                        "type": "STRING",
+                        "description": "Cryptocurrency name (e.g. bitcoin, ethereum)"
+                    }
+                },
+                "required": [
+                    "coin"
+                ]
+            },
+            "file": "crypto_price.py"
+        },
+        {
+            "name": "youtube_account_access",
+            "description": "Позволяет взаимодействовать с YouTube, включая поиск и воспроизведение видео.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Поисковый запрос для видео."
+                    }
+                },
+                "required": [
+                    "query"
+                ]
+            },
+            "file": "youtube_account_access.py"
+        },
+        {
+            "name": "discord_control",
+            "description": "Управление Discord: отправка сообщений, управление каналами и статусом.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Действие: send_message | manage_channel | set_status"
+                    },
+                    "channel_id": {
+                        "type": "string",
+                        "description": "ID канала"
+                    },
+                    "message_text": {
+                        "type": "string",
+                        "description": "Текст сообщения"
+                    }
+                },
+                "required": [
+                    "action"
+                ]
+            },
+            "file": "discord_control.py"
+        }
+    ]
+}
