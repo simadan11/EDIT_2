@@ -76,6 +76,15 @@ To turn it off: press **🌐** again or say *«выключи интернет �
 
 ---
 
+## 🤖 Publish EDIT Remote as a native Android app (Google Play)
+
+The dashboard is PWA-ready, so it can be shipped to Google Play as a real app
+via **Trusted Web Activity (Bubblewrap)** — fullscreen, own icon, AAB bundle.
+Digital Asset Links are served by the dashboard itself
+(`/.well-known/assetlinks.json`). Full step-by-step guide:
+**[play-store/README.md](play-store/README.md)** — Bubblewrap build, SHA-256
+fingerprints, Play Console checklist.
+
 ## 📲 Install EDIT on your phone as an app (PWA)
 
 The Remote Dashboard is an installable web app (PWA) — you get an icon on the home screen, a full-screen window and a faster start, so the assistant feels like a real app on the phone.

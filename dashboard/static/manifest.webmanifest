@@ -1,6 +1,9 @@
 {
   "name": "EDIT — Remote Assistant",
   "short_name": "EDIT",
+  "id": "/",
+  "lang": "ru",
+  "categories": ["productivity", "utilities"],
   "description": "Голосовой ассистент EDIT: Remote Dashboard, режим наушников, EDITH-камера, Holo Lab.",
   "start_url": "/",
   "scope": "/",

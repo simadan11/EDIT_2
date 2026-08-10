@@ -933,6 +933,18 @@ class DashboardServer:
                 return FileResponse(str(path))
             return JSONResponse({"error": "Not found"}, status_code=404)
 
+        # ── Digital Asset Links — связка сайта с Android-приложением (TWA) ──
+        # Google Play упаковка (см. play-store/README.md): Bubblewrap генерирует
+        # assetlinks.json → кладём его в dashboard/static/.well-known/ — и
+        # приложение открывается fullscreen, без адресной строки браузера.
+        @app.get("/.well-known/assetlinks.json")
+        async def asset_links():
+            path = STATIC_DIR / ".well-known" / "assetlinks.json"
+            if path.exists() and path.is_file():
+                return FileResponse(str(path), media_type="application/json")
+            return JSONResponse({"error": "not configured — see play-store/README.md"},
+                                status_code=404)
+
         @app.get("/login", response_class=HTMLResponse)
         async def login_page():
             return HTMLResponse(self._login_html)
