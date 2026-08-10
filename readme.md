@@ -54,6 +54,29 @@ It's not just an assistant — it's an extension of your digital life.
 
 ---
 
+## 🎙 Voice — смена и тонкая настройка голоса
+
+В панели **⚙️ → CUSTOMISE ASSISTANT** теперь можно выбрать голоса:
+
+- **LIVE VOICE** — основной голос ассистента (Gemini Live): `Puck`, `Charon`,
+  `Kore`, `Fenrir`, `Aoede`. Применяется к новой сессии (перезапуск EDIT).
+  Конфиг: `"voice_name": "Puck"`.
+- **JARVIS VOICE** — голос модуля озвучки (EdgeTTS, наушники/PC-режим):
+  `ru-RU-DmitryNeural` (по умолчанию), `ru-RU-SvetlanaNeural`,
+  `en-GB-RyanNeural`… любой валидный EdgeTTS id. Конфиг: `"tts_jarvis_voice"`.
+
+Чёткость нейроголоса EdgeTTS (модуль озвучки), в `config/api_keys.json`:
+
+```json
+"tts_jarvis_rate": "-5%",      // скорость: чуть медленнее = разборчивее
+"tts_jarvis_pitch": "+0Hz",    // тон, напр. "+5Hz" выше
+"tts_jarvis_volume": "+0%"     // громкость
+```
+
+Тот же тюнинг для голоса на PC-колонках — общие ключи `tts_rate`,
+`tts_pitch`, `tts_volume`. Весь поток телефонной озвучки дополнительно
+проходит пиковую нормализацию — одинаковая громкость каждой реплики.
+
 ## 🌐 Internet Access — use EDIT from anywhere over mobile data (no WiFi)
 
 When you leave home there is no WiFi, so the local address `192.168.x.x:8000` is unreachable. EDIT can open a **public tunnel** (playit.gg / Cloudflare quick tunnel / ngrok) that gives you an internet URL — open it on your phone over **mobile data** and the same Remote Dashboard works: headphones mode 🎧, voice channel, EDITH camera.

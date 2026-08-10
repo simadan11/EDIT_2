@@ -3367,13 +3367,23 @@ class HueWheel(QWidget):
 
 
 class CustomizeOverlay(QWidget):
-    """Floating overlay — change assistant name, user name and UI colour."""
+    """Floating overlay — assistant name, user name, UI colour, AI voices."""
 
-    saved = pyqtSignal(str, str, str)   # assistant_name, user_name, ui_color
-    _OW, _OH = 400, 500
+    saved = pyqtSignal(str, str, str, str, str)   # asst, user, ui_color, live_voice, tts_voice
+    _OW, _OH = 400, 620
+
+    # keep in sync with main.LIVE_VOICES (Gemini Live prebuilt voices)
+    _LIVE_VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede")
+    # popular clear EdgeTTS voices (editable field — any xx-XX-NameNeural id works)
+    _TTS_VOICES = (
+        "ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural", "ru-RU-DariyaNeural",
+        "en-GB-RyanNeural", "en-GB-ThomasNeural", "en-US-GuyNeural",
+        "en-US-ChristopherNeural", "tr-TR-AhmetNeural",
+    )
 
     def __init__(self, assistant_name="EDIT", user_name="",
-                 ui_color=DEFAULT_UI_COLOR, parent=None):
+                 ui_color=DEFAULT_UI_COLOR, live_voice="Puck",
+                 tts_voice="ru-RU-DmitryNeural", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
@@ -3420,6 +3430,36 @@ class CustomizeOverlay(QWidget):
         self._user_input.setFixedHeight(32)
         self._user_input.setStyleSheet(_fs)
         lay.addWidget(self._user_input)
+
+        # ── AI voices ────────────────────────────────────────────────────
+        _cs = (f"QComboBox {{ background: #000d12; color: {C.TEXT}; "
+               f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 4px 8px; }}"
+               f"QComboBox QAbstractItemView {{ background: #000d12; color: {C.TEXT}; "
+               f"selection-background-color: {C.PRI_GHO}; }}")
+
+        lay.addSpacing(4)
+        lay.addWidget(_lbl("LIVE VOICE  (Gemini — основной голос)", 8,
+                           color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._live_combo = QComboBox()
+        self._live_combo.addItems(self._LIVE_VOICES)
+        if live_voice in self._LIVE_VOICES:
+            self._live_combo.setCurrentText(live_voice)
+        self._live_combo.setFont(QFont("Courier New", 10))
+        self._live_combo.setFixedHeight(30)
+        self._live_combo.setStyleSheet(_cs)
+        lay.addWidget(self._live_combo)
+
+        lay.addSpacing(2)
+        lay.addWidget(_lbl("JARVIS VOICE  (EdgeTTS — модуль озвучки)", 8,
+                           color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._tts_combo = QComboBox()
+        self._tts_combo.setEditable(True)      # свой id голоса — тоже можно
+        self._tts_combo.addItems(self._TTS_VOICES)
+        self._tts_combo.setCurrentText(tts_voice or "ru-RU-DmitryNeural")
+        self._tts_combo.setFont(QFont("Courier New", 10))
+        self._tts_combo.setFixedHeight(30)
+        self._tts_combo.setStyleSheet(_cs)
+        lay.addWidget(self._tts_combo)
 
         # ── UI colour — renk çarkı ───────────────────────────────────────────
         lay.addSpacing(4)
@@ -3534,7 +3574,9 @@ class CustomizeOverlay(QWidget):
     def _save(self):
         name = self._name_input.text().strip() or "EDIT"
         user = self._user_input.text().strip()
-        self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR)
+        lv   = self._live_combo.currentText().strip()
+        tv   = self._tts_combo.currentText().strip()
+        self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR, lv, tv)
         self.hide()
 
 
@@ -6372,6 +6414,8 @@ class MainWindow(QMainWindow):
             cfg.get("assistant_name", "EDIT") or "EDIT",
             cfg.get("user_name", ""),
             cfg.get("ui_color", "") or DEFAULT_UI_COLOR,
+            live_voice=cfg.get("voice_name", "") or "Puck",
+            tts_voice=cfg.get("tts_jarvis_voice", "") or "ru-RU-DmitryNeural",
             parent=cw,
         )
         ow, oh = CustomizeOverlay._OW, CustomizeOverlay._OH
@@ -6392,7 +6436,8 @@ class MainWindow(QMainWindow):
         if apply_ui_accent(hex_color):
             retheme_all_widgets(old, current_palette())
 
-    def _apply_name_update(self, name: str, user_name: str, ui_color: str = ""):
+    def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
+                           live_voice: str = "", tts_voice: str = ""):
         """Update all name/theme-dependent UI elements and persist to config."""
         self._assistant_name = name.strip() or "EDIT"
         display = self._assistant_name.upper()
@@ -6421,8 +6466,18 @@ class MainWindow(QMainWindow):
             data["user_name"] = user_name.strip()
             if ui_color:
                 data["ui_color"] = ui_color.strip().lower()
+            if live_voice:
+                data["voice_name"] = live_voice.strip()
+            if tts_voice:
+                data["tts_jarvis_voice"] = tts_voice.strip()
             API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
             self._log.append_log(f"SYS: Identity updated — {display}")
+            if live_voice:
+                self._log.append_log(
+                    f"SYS: Live voice → {live_voice} (applies to the next session)")
+            if tts_voice:
+                self._log.append_log(
+                    f"SYS: TTS voice → {tts_voice} (applies to new replies)")
             if color_changed:
                 self._log.append_log(f"SYS: UI colour applied — {ui_color}")
         except Exception as e:

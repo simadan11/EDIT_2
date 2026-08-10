@@ -146,6 +146,21 @@ def save_connected_live_model(model_name: str) -> None:
         pass
 
 LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+
+# Голоса Gemini Live (native audio).
+# voice_name в config/api_keys.json — регистр не важен; невалидное → default.
+LIVE_VOICES = ["Puck", "Charon", "Kore", "Fenrir", "Aoede"]
+DEFAULT_LIVE_VOICE = "Puck"          # яркий и чёткий (Charon — басистый запасной)
+
+
+def get_live_voice(cfg: dict) -> str:
+    """Gemini Live prebuilt voice from config, validated against the list."""
+    v = str((cfg or {}).get("voice_name") or "").strip()
+    for cand in LIVE_VOICES:
+        if v.lower() == cand.lower():
+            return cand
+    return DEFAULT_LIVE_VOICE
+
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
@@ -1015,12 +1030,16 @@ class _TTSBridge:
     Either way the AI (Gemini Live) does NOT speak — exactly one voice.
     """
 
-    def __init__(self, stream_cb=None, voice: str = "ru-RU-DmitryNeural"):
+    def __init__(self, stream_cb=None, voice: str = "ru-RU-DmitryNeural",
+                 rate: str = "", pitch: str = "", volume: str = ""):
         self._q = queue.Queue()
         self._player = None
         self._lock = threading.Lock()
         self._stream_cb = stream_cb          # callable(bytes) → dashboard sink
         self._voice = voice or "ru-RU-DmitryNeural"
+        self._rate   = rate                  # EdgeTTS "-5%" | "+10%" | ""
+        self._pitch  = pitch                 # EdgeTTS "+8Hz" | ""
+        self._volume = volume                # EdgeTTS "+20%" | ""
         self._streaming = False              # True while streaming to the phone
         self._cancelled = False
         self._thread = threading.Thread(
@@ -1117,6 +1136,11 @@ class _TTSBridge:
                 nchannels=1,
             )
             samples = np.asarray(decoded.samples, dtype=np.float32)
+            # peak-normalise — одинаковая громкость и чёткость каждой реплики
+            if len(samples):
+                peak = float(np.max(np.abs(samples)))
+                if 1e-5 < peak:
+                    samples = (samples * (0.92 / peak)).astype(np.float32)
             sr = int(decoded.sample_rate) or 24000
             if sr != 24000 and len(samples):
                 n = int(len(samples) * 24000 / sr)
@@ -1140,7 +1164,14 @@ class _TTSBridge:
                 self._streaming = False
 
     async def _synth_async(self, text: str, edge_tts) -> bytes:
-        comm = edge_tts.Communicate(text, self._voice)
+        kw = {}
+        if self._rate:
+            kw["rate"] = self._rate
+        if self._pitch:
+            kw["pitch"] = self._pitch
+        if self._volume:
+            kw["volume"] = self._volume
+        comm = edge_tts.Communicate(text, self._voice, **kw)
         buf = bytearray()
         async for chunk in comm.stream():
             if chunk["type"] == "audio":
@@ -1371,14 +1402,36 @@ class JarvisLive:
             return False
 
     def _jarvis_voice(self) -> str:
-        """EdgeTTS voice used by the Jarvis Voice Module (phone headphones)."""
+        """EdgeTTS voice used by the Jarvis Voice Module (phone headphones).
+        Config: "tts_jarvis_voice" — full EdgeTTS id, напр. ru-RU-DmitryNeural."""
         try:
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-                return str(
+                v = str(
                     json.load(f).get("tts_jarvis_voice", "ru-RU-DmitryNeural")
-                ).strip() or "ru-RU-DmitryNeural"
+                ).strip()
+            # базовая валидация id голоса: xx-XX-NameNeural / xx-NameNeural
+            if re.fullmatch(r"[a-zA-Z]{2}(-[a-zA-Z]{2,4})?-[a-zA-Z0-9]+", v):
+                return v
         except Exception:
-            return "ru-RU-DmitryNeural"
+            pass
+        return "ru-RU-DmitryNeural"
+
+    def _tts_clarity(self) -> tuple[str, str, str]:
+        """EdgeTTS tuning from config: rate ("-5%"), pitch ("+5Hz"),
+        volume ("+0%"). Пустые строки = дефолт EdgeTTS."""
+        try:
+            with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+        def _pct(key, default=""):
+            v = str(cfg.get(key, "") or "").strip()
+            return v if re.fullmatch(r"[+-]?\d{1,3}(?:\.\d+)?%", v) else default
+        def _hz(key, default=""):
+            v = str(cfg.get(key, "") or "").strip()
+            return v if re.fullmatch(r"[+-]?\d{1,3}(?:\.\d+)?Hz", v, re.I) else default
+        return (_pct("tts_jarvis_rate"), _hz("tts_jarvis_pitch"),
+                _pct("tts_jarvis_volume"))
 
     def _save_tts_voice_mode(self, enabled: bool) -> None:
         try:
@@ -1625,9 +1678,11 @@ class JarvisLive:
         if self._phone_headphones_active and self._dashboard:
             if self._jarvis_available():
                 if self._jarvis_tts is None:
+                    _rate, _pitch, _vol = self._tts_clarity()
                     self._jarvis_tts = _TTSBridge(
                         stream_cb=self._dashboard.feed_audio,
                         voice=self._jarvis_voice(),
+                        rate=_rate, pitch=_pitch, volume=_vol,
                     )
                 self._jarvis_tts.speak(text)
             else:
@@ -1743,7 +1798,7 @@ class JarvisLive:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"
+                        voice_name=get_live_voice(_cfg)
                     )
                 )
             ),

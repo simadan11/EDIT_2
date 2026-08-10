@@ -103,10 +103,20 @@ def _play_audio_bytes(audio_bytes: bytes) -> None:
 # ---------------------------------------------------------------------------
 
 class EdgeTTSEngine:
-    """Microsoft EdgeTTS – free, requires internet."""
+    """Microsoft EdgeTTS – free, requires internet.
 
-    def __init__(self, voice: str = "en-US-GuyNeural"):
-        self.voice = voice
+    Clarity tuning (из конфига, все поля опциональны):
+      tts_rate   — "+10%" / "-5%" (чуть медленнее = разборчивее)
+      tts_pitch  — "+5Hz" / "-5Hz"
+      tts_volume — "+20%" / "-10%"
+    """
+
+    def __init__(self, voice: str = "en-US-GuyNeural",
+                 rate: str = "", pitch: str = "", volume: str = ""):
+        self.voice  = voice
+        self.rate   = rate
+        self.pitch  = pitch
+        self.volume = volume
 
     def speak(self, text: str) -> None:
         loop = asyncio.new_event_loop()
@@ -119,7 +129,14 @@ class EdgeTTSEngine:
 
     async def _synth(self, text: str) -> bytes:
         import edge_tts
-        comm = edge_tts.Communicate(text, self.voice)
+        kw = {}
+        if self.rate:
+            kw["rate"] = self.rate
+        if self.pitch:
+            kw["pitch"] = self.pitch
+        if self.volume:
+            kw["volume"] = self.volume
+        comm = edge_tts.Communicate(text, self.voice, **kw)
         buf  = bytearray()
         async for chunk in comm.stream():
             if chunk["type"] == "audio":
@@ -438,5 +455,8 @@ def create_tts_player(config: dict) -> TTSPlayer:
         engine   = ElevenLabsTTSEngine(api_key=api_key, voice_id=voice_id)
     else:   # edgetts (default)
         voice  = config.get("tts_voice", "en-US-GuyNeural")
-        engine = EdgeTTSEngine(voice=voice)
+        engine = EdgeTTSEngine(voice=voice,
+                               rate=str(config.get("tts_rate", "") or ""),
+                               pitch=str(config.get("tts_pitch", "") or ""),
+                               volume=str(config.get("tts_volume", "") or ""))
     return TTSPlayer(engine)
