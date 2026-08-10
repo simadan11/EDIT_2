@@ -729,10 +729,11 @@ TOOL_DECLARATIONS = [
     {
         "name": "internet_access",
         "description": (
-            "Toggles a public HTTPS tunnel (Cloudflare/ngrok) so EDIT's Remote "
+            "Toggles a public HTTPS tunnel (playit.gg/Cloudflare/ngrok) so EDIT's Remote "
             "Dashboard is reachable from the phone over MOBILE DATA when there "
             "is no WiFi (e.g. away from home). Provides an internet URL like "
-            "https://xxx.trycloudflare.com with the same dashboard: headphones "
+            "https://xxx.at.ply.gg:12345 (playit, fixed) or "
+            "xxx.trycloudflare.com with the same dashboard: headphones "
             "mode 🎧, voice, EDITH camera. Call when the user says: интернет "
             "доступ, доступ через интернет, мобильный интернет, туннель, "
             "чтобы работало не дома, internet access, tunnel, remote from "
@@ -1541,15 +1542,45 @@ class JarvisLive:
                 url = st.get("url") or ""
                 if url:
                     self.ui.write_log(f"🌐 INTERNET ACCESS: {url}")
+                    extra = (
+                        "\n\nНа playit.gg (https, самоподписанный сертификат): "
+                        "первый раз — Advanced → «перейти всё равно», один раз."
+                        if st.get("engine") == "playit" else ""
+                    )
                     self.ui.show_content(
                         "🌐 INTERNET ACCESS — EDIT (мобильный интернет)",
                         f"{url}\n\nОткрой этот адрес на телефоне — тот же Remote "
                         "Dashboard, режим наушников 🎧 и всё остальное работают "
                         "через мобильный интернет. Первый вход: PIN из "
-                        "Remote Control (телефон с запомненным токеном входит сам).",
+                        "Remote Control (телефон с запомненным токеном входит сам)."
+                        + extra,
                     )
                 else:
-                    self.ui.write_log("🌐 Tunnel started but URL not ready yet")
+                    claim = st.get("claim_url") or ""
+                    if claim:
+                        self.ui.write_log(f"🌐 playit: привяжи агент — {claim}")
+                        self.ui.show_content(
+                            "🌐 PLAYIT — привязка агента",
+                            f"Открой на этом ПК: {claim}\n\n"
+                            "1) Войди/зарегистрируйся на playit.gg → Claim agent\n"
+                            "2) В панели playit.gg: Add Tunnel → Protocol: TCP\n"
+                            "     → Local IP: 127.0.0.1 → Port: 8001\n"
+                            "3) Нажми 🌐 ещё раз — появится постоянный адрес\n"
+                            "     вида xxx.at.ply.gg:12345\n\n"
+                            "Телефон: https://<адрес> → принять сертификат (1 раз)\n"
+                            "→ PIN из Remote Control → Add to Home screen.",
+                        )
+                    elif st.get("engine") == "playit":
+                        self.ui.write_log("🌐 playit: агент запущен, адреса нет — создай туннель в панели playit.gg")
+                        self.ui.show_content(
+                            "🌐 PLAYIT — создай туннель",
+                            "Агент запущен, но публичный адрес не назначен.\n\n"
+                            "В панели playit.gg → Tunnels → Add Tunnel:\n"
+                            "  Protocol: TCP → Local IP: 127.0.0.1 → Port: 8001\n"
+                            "Затем нажми 🌐 ещё раз.",
+                        )
+                    else:
+                        self.ui.write_log("🌐 Tunnel started but URL not ready yet")
             else:
                 await asyncio.to_thread(self._tunnel.stop)
                 TunnelManager.set_enabled(False)
@@ -2097,7 +2128,8 @@ class JarvisLive:
                 elif st.get("error") == "no_tunnel_binary":
                     result = (
                         "Internet tunnel needs a tunnel program installed on the "
-                        "PC: Cloudflare (cloudflared) or ngrok. See the on-screen "
+                        "PC: playit.gg agent (fixed free address), Cloudflare "
+                        "(cloudflared) or ngrok. See the on-screen "
                         "instructions."
                     )
                 else:

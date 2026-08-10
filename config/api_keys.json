@@ -3,5 +3,6 @@
     "os_system": "windows",
     "live_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
     "headphones_mode": false,
-    "wake_bracket": true
+    "wake_bracket": true,
+    "tunnel_engine": "playit"
 }

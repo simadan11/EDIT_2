@@ -56,11 +56,36 @@ It's not just an assistant — it's an extension of your digital life.
 
 ## 🌐 Internet Access — use EDIT from anywhere over mobile data (no WiFi)
 
-When you leave home there is no WiFi, so the local address `192.168.x.x:8000` is unreachable. EDIT can open a **public HTTPS tunnel** (Cloudflare quick tunnel or ngrok) that gives you an internet URL — open it on your phone over **mobile data** and the same Remote Dashboard works: headphones mode 🎧, voice channel, EDITH camera.
+When you leave home there is no WiFi, so the local address `192.168.x.x:8000` is unreachable. EDIT can open a **public tunnel** (playit.gg / Cloudflare quick tunnel / ngrok) that gives you an internet URL — open it on your phone over **mobile data** and the same Remote Dashboard works: headphones mode 🎧, voice channel, EDITH camera.
 
-### How to use
-1. **Install a tunnel engine on the PC** (one time):
-   - Cloudflare (recommended, free, no account):
+### Вариант A — playit.gg (личное постоянное приложение, бесплатный ФИКСИРОВАННЫЙ адрес)
+
+playit.gg — туннель без port-forwarding и без своего домена; адрес вида
+`xxx.at.ply.gg:12345` **не меняется**, пока жив туннель в панели playit.
+
+1. Скачайте агент: https://playit.gg/download (Windows: `playit-windows-*.exe`,
+   положите в `Downloads` — EDIT найдёт его сам).
+2. В EDIT нажмите **🌐 INTERNET ACCESS** (⚙️). Первый запуск покажет
+   claim-ссылку `https://playit.gg/claim/…` — откройте её, войдите на
+   playit.gg, нажмите **Claim agent**.
+3. В панели playit.gg: **Add Tunnel → Protocol: TCP → Local IP: 127.0.0.1 →
+   Port: 8001** (`8001` — наш HTTPS-алиас дашборда).
+4. Нажмите **🌐** ещё раз — EDIT покажет адрес `https://xxx.at.ply.gg:12345`.
+5. На телефоне (4G): открыть адрес → один раз принять самоподписанный
+   сертификат → ввести PIN из Remote Control → **«Добавить на главный экран»**
+   — это и есть личное приложение (вход дальше автоматический по device-token).
+6. Автостарт: `"internet_tunnel": true` в `config/api_keys.json`.
+
+Force engine: `"tunnel_engine": "playit" | "cloudflared" | "ngrok" | "auto"`.
+
+> 📦 Хотите настоящую иконку-приложение без магазина? Соберите TWA-APK по
+> гайду **`play-store/README.md`** — для личного пользования Google Play не
+> нужен, ставите `app-release-signed.apk` напрямую на телефон.
+
+### Вариант B — Cloudflare quick tunnel / ngrok (URL на один раз)
+
+1. Install a tunnel engine on the PC (one time):
+   - Cloudflare (free, no account):
      - Windows: `winget install cloudflare.cloudflared` (or download `cloudflared.exe` from the releases page),
      - macOS: `brew install cloudflared`,
      - Linux: `sudo apt install cloudflared`.
@@ -71,7 +96,7 @@ When you leave home there is no WiFi, so the local address `192.168.x.x:8000` is
 
 To turn it off: press **🌐** again or say *«выключи интернет доступ»*. The mode can auto-start with EDIT (`internet_tunnel: true` in `config/api_keys.json`).
 
-> 🔒 The tunnel URL is random on every start (quick tunnels). For a **permanent** address, create a free Cloudflare account, set up a named tunnel, and put your stable URL in `config/api_keys.json` → `tunnel_static_url`. Auth still applies (PIN / paired device token), and API/WS traffic is never cached by the service worker.
+> 🔒 Quick-tunnel URL is random on every start. For a **permanent** address use playit.gg (above) or a free Cloudflare account + named tunnel, and put the stable URL in `config/api_keys.json` → `tunnel_static_url` (полный автомат: `cloudflare/setup-remote-control.ps1`). Auth still applies (PIN / paired device token), and API/WS traffic is never cached by the service worker.
 > 📶 Voice over mobile data works but latency is higher than on LAN — fine for commands, slightly delayed for back-and-forth conversation.
 
 ---

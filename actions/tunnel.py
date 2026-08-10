@@ -6,14 +6,19 @@ Internet Tunnel (🌐) — доступ к EDIT из любой точки че�
 публичный HTTPS-туннель с ПК, и телефон открывает тот же Remote Dashboard
 через интернет-URL вида https://xxxx.trycloudflare.com.
 
-Движки (по порядку предпочтения):
+Движки (по порядку предпочтения; принудительно: "tunnel_engine" в конфиге):
   1. Cloudflare quick tunnel  — cloudflared tunnel --url http://localhost:PORT
      (бесплатно, без аккаунта, URL меняется при каждом запуске)
   2. ngrok                    — ngrok http PORT
      (бесплатно, без аккаунта, URL меняется при каждом запуске)
+  3. playit.gg                — playit-agent (туннели TCP/UDP без port-forward)
+     ФИКСИРОВАННЫЙ бесплатный адрес вида ххх.at.ply.gg:PORT — живёт, пока
+     существует туннель в веб-дашборде playit. Первый запуск печатает
+     claim-ссылку вида https://playit.gg/claim/XXXX — агент привязывается
+     к аккаунту, туннель настраивается в веб-панели (TCP → 127.0.0.1:8001).
 
-Для постоянного адреса: бесплатный аккаунт Cloudflare + named tunnel
-(см. README) — достаточно задать статический URL в конфиге.
+Для постоянного адреса (Cloudflare-путь): бесплатный аккаунт Cloudflare +
+named tunnel (см. README) — достаточно задать статический URL в конфиге.
 
 Порядок запуска: start_tunnel() — фоновый процесс, URL парсится из логов.
 """
@@ -32,6 +37,14 @@ from pathlib import Path
 
 _PORT = 8000
 _URL_RE = re.compile(r"https://[a-zA-Z0-9\-\.]+\.(?:trycloudflare\.com|ngrok\.(?:io|app))[^\s'\"]*", re.I)
+# playit.gg: публичные адреса туннелей печатаются агентом в stdout
+_PLAYIT_ADDR_RE = re.compile(
+    r"([a-z0-9][a-z0-9\-\.]*\.(?:ply\.gg|joinmc\.link|auto\.playit\.gg))(?::(\d{2,5}))?", re.I)
+# служебные хосты playit — не адреса туннелей
+_PLAYIT_SKIP = {"playit.gg", "ping.playit.gg", "api.playit.gg", "new.playit.gg",
+                "account.playit.gg", "docs.playit.gg"}
+# привязка агента к аккаунту (первый запуск на новой машине)
+_PLAYIT_CLAIM_RE = re.compile(r"https://playit\.gg/claim/[A-Za-z0-9\-_]+")
 
 
 def _find_bin(names: list[str]) -> str | None:
@@ -45,6 +58,12 @@ def _find_bin(names: list[str]) -> str | None:
             Path.home() / "cloudflared.exe",
             Path(r"C:\Program Files (x86)\cloudflared\cloudflared.exe"),
             Path.home() / "ngrok.exe",
+            Path.home() / "Downloads" / "playit-windows-x86_64.exe",
+            Path.home() / "Downloads" / "playit-windows-x64.exe",
+            Path.home() / "Downloads" / "playit.exe",
+            Path.home() / "playit.exe",
+            Path(r"C:\Program Files\playit_gg\bin\playit.exe"),
+            Path(r"C:\Program Files (x86)\playit_gg\bin\playit.exe"),
         ):
             if cand.exists():
                 return str(cand)
@@ -59,12 +78,30 @@ def ngrok_bin() -> str | None:
     return _find_bin(["ngrok", "ngrok.exe"])
 
 
+def playit_bin() -> str | None:
+    return _find_bin(["playit", "playit.exe", "playit-cli", "playit-agent"])
+
+_BINS = {"cloudflared": cloudflared_bin, "ngrok": ngrok_bin, "playit": playit_bin}
+
+
 def engine() -> str | None:
-    """Which tunnel engine is available: 'cloudflared' | 'ngrok' | None."""
-    if cloudflared_bin():
-        return "cloudflared"
-    if ngrok_bin():
-        return "ngrok"
+    """Which tunnel engine: 'cloudflared' | 'ngrok' | 'playit' | None.
+
+    Принудительный выбор: "tunnel_engine" в config/api_keys.json
+    ("playit" / "cloudflared" / "ngrok" / "auto"). При "auto" берётся первый
+    установленный движок.
+    """
+    pref = "auto"
+    try:
+        with open(TunnelManager.config_path(), encoding="utf-8") as f:
+            pref = str(json.load(f).get("tunnel_engine", "auto") or "auto").strip().lower()
+    except Exception:
+        pass
+    if pref in _BINS:
+        return pref                                    # явный выбор пользователя
+    for name, fn in _BINS.items():
+        if fn():
+            return name
     return None
 
 
@@ -73,7 +110,16 @@ def install_hint() -> str:
     lines = [
         "Интернет-туннель не установлен. Установи один из движков:",
         "",
-        "  Cloudflare (рекомендуется):",
+        "  playit.gg (рекомендуется для себя — ПОСТОЯННЫЙ бесплатный адрес):",
+        "    1. Скачай агент:  https://playit.gg/download   (Windows: playit-windows-*.exe)",
+        "    2. Нажми 🌐 в EDIT ещё раз — агент напечатает claim-ссылку",
+        "       https://playit.gg/claim/XXXX — открой её и привяжи агент к аккаунту",
+        "    3. В панели playit.gg: Add Tunnel → Protocol TCP → Local 127.0.0.1 → Port 8001",
+        "    4. Готово: твой постоянный адрес вида  xxx.at.ply.gg:12345",
+        "       Телефон: https://xxx.at.ply.gg:12345 → принять сертификат (1 раз)",
+        "       → PIN → «Add to Home screen» = личное приложение, работает на 4G.",
+        "",
+        "  Cloudflare (быстрый URL на один раз, без аккаунта):",
         "    Windows (PowerShell, от админа):",
         "      winget install cloudflare.cloudflared",
         "      (или скачай cloudflared.exe с https://github.com/cloudflare/cloudflared/releases)",
@@ -97,6 +143,7 @@ class TunnelManager:
         self._proc: subprocess.Popen | None = None
         self._url: str = ""
         self._engine: str | None = None
+        self._claim_url: str = ""     # playit: ссылка привязки агента (1-й запуск)
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -120,12 +167,17 @@ class TunnelManager:
             return self._engine
 
     def status(self) -> dict:
-        return {
+        with self._lock:
+            claim = self._claim_url
+        st = {
             "active": self.active,
             "url": self.url,
             "engine": self.engine_name or engine(),
             "static_url": self._static_url,
         }
+        if claim:
+            st["claim_url"] = claim
+        return st
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
@@ -141,24 +193,29 @@ class TunnelManager:
             if not eng:
                 return {"active": False, "error": "no_tunnel_binary",
                         "hint": install_hint()}
+            exe = _BINS[eng]()
+            if not exe:
+                # движок выбран в конфиге ("tunnel_engine"), но не установлен
+                return {"active": False, "error": "no_tunnel_binary", "engine": eng,
+                        "hint": install_hint()}
             self._engine = eng
             self._stop.clear()
             self._ready.clear()
+            self._claim_url = ""
             if eng == "cloudflared":
-                cmd = [cloudflared_bin(), "tunnel", "--url", f"http://localhost:{self._port}",
+                cmd = [exe, "tunnel", "--url", f"http://localhost:{self._port}",
                        "--no-autoupdate"]
-                self._proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace",
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
+            elif eng == "playit":
+                # playit-агент сам поднимает все туннели аккаунта;
+                # публичный адрес назначен в веб-панели playit.gg
+                cmd = [exe]
             else:  # ngrok
-                cmd = [ngrok_bin(), "http", str(self._port), "--log", "stdout"]
-                self._proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace",
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
+                cmd = [exe, "http", str(self._port), "--log", "stdout"]
+            self._proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
 
         # Parse the URL from the process output in a thread
         self._thread = threading.Thread(target=self._watch, daemon=True)
@@ -212,6 +269,29 @@ class TunnelManager:
                     self._url = m.group(0).rstrip("/")
                 self._ready.set()
                 buf = buf[m.end():]
+                continue
+            with self._lock:
+                eng = self._engine
+            if eng == "playit":
+                # 1) claim-ссылка (первый запуск агента на новой машине)
+                cm = _PLAYIT_CLAIM_RE.search(buf)
+                if cm:
+                    with self._lock:
+                        self._claim_url = cm.group(0)
+                    buf = buf[cm.end():]
+                    continue
+                # 2) публичный адрес туннеля, напр. xyz.at.ply.gg:25431
+                for am in _PLAYIT_ADDR_RE.finditer(buf):
+                    host, port = am.group(1), am.group(2)
+                    if host.lower() in _PLAYIT_SKIP:
+                        continue
+                    with self._lock:
+                        self._url = f"https://{host}:{port}" if port else f"https://{host}"
+                    self._ready.set()
+                    buf = buf[am.end():]
+                    break
+                if len(buf) > 4096:
+                    buf = buf[-2048:]
                 continue
             if len(buf) > 4096:
                 buf = buf[-2048:]
