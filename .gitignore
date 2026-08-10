@@ -1,0 +1,4 @@
+# Credentials / VPN profiles — must NEVER be committed.
+# A portmap.io .ovpn profile contains a private key + client certificate.
+config/*.ovpn
+*.ovpn

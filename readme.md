@@ -106,8 +106,13 @@ portmap.io даёт постоянный адрес вида `tcp://ваше-и�
 
 1. https://portmap.io → регистрация → **Create new configuration** →
    Protocol: **TCP**, Local IP `127.0.0.1`, Local port **8001** → Create.
+   ⚠️ Если туннель уже создан с другим локальным портом (напр. `7777`) —
+   откройте его на **Edit** в кабинете portmap и поменяйте Local port на
+   **8001**, иначе внешний адрес будет смотреть в пустоту.
 2. В разделе конфигурации скачайте **.ovpn-профиль** → положите его в
-   `config\portmap.ovn` → переименуйте в **`config\portmap.ovpn`**.
+   `config\portmap.ovpn`.
+   🔒 Профиль содержит приватный ключ — он в `.gitignore`, в git не попадёт,
+   никому не отправляйте.
 3. Установите OpenVPN: https://openvpn.net/community-downloads/
    (Windows Installer; нужен админ — ставится TAP-адаптер).
 4. В `config/api_keys.json` (уже выставлено для адреса Danz…):
