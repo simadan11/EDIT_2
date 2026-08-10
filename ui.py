@@ -566,6 +566,24 @@ class KnowledgeNetCanvas(QWidget):
         self._legend_rows: list[tuple[QRectF, str]] = []
         self._bg: QPixmap | None = None
 
+        # ── cinematic layers ─────────────────────────────────────────────
+        self._tickn = 0
+        self._rng = random.Random(99)
+        # data packets: летающие по связям точки [edge_idx, t(0..1), speed]
+        self._hub_edges = [k for k, (a, b) in enumerate(self._edges)
+                           if a < len(_NET_HUBS) or b < len(_NET_HUBS)]
+        self._packets: list[list[float]] = [
+            [self._rng.choice(self._hub_edges) if self._hub_edges else 0,
+             self._rng.random(), self._rng.uniform(0.25, 0.75)]
+            for _ in range(26)
+        ]
+        # сонарные волны от случайных хабов: [hub_idx, radius_px]
+        self._sonar: list[list[float]] = []
+        self._sonar_next = 2.5
+        # параллакс-звёзды (fx, fy, depth)
+        self._stars = [(self._rng.random(), self._rng.random(),
+                        self._rng.uniform(0.12, 0.5)) for _ in range(90)]
+
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._tmr.start(33)
@@ -675,6 +693,22 @@ class KnowledgeNetCanvas(QWidget):
                 self._vyaw *= 0.94
                 self._vpitch *= 0.94
         self._zoom += (self._zoom_tgt - self._zoom) * 0.18
+
+        # ── cinematic layer updates ──────────────────────────────────────
+        self._tickn += 1
+        for pkt in self._packets:
+            pkt[1] += pkt[2] * dt * 1.4                # t: 0 → 1
+            if pkt[1] > 1.0 and self._hub_edges:
+                pkt[0] = self._rng.randrange(len(self._edges)) \
+                    if self._rng.random() < 0.35 else self._rng.choice(self._hub_edges)
+                pkt[1] = 0.0
+                pkt[2] = self._rng.uniform(0.25, 0.75)
+        self._sonar_next -= dt
+        if self._sonar_next <= 0 and not self._drag:
+            self._sonar_next = self._rng.uniform(3.5, 6.0)
+            if len(self._sonar) < 3:
+                self._sonar.append([float(self._rng.randrange(len(_NET_HUBS))), 0.0])
+        self._sonar = [[h, r + 210.0 * dt] for h, r in self._sonar if r < 320.0]
         self.update()
 
     # ── picking / interaction ────────────────────────────────────────────
@@ -756,6 +790,17 @@ class KnowledgeNetCanvas(QWidget):
         scale = min(W, H) * 0.128 * self._zoom
         D = 4.0
 
+        # ── parallax starfield (drifts slower than the galaxy) ───────────
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        yaw_shift = (self._yaw * 160.0) % (W + 120)
+        for fx, fy, depth in self._stars:
+            sx = (fx * (W + 120) - 60 - yaw_shift * depth) % (W + 120) - 60
+            sy = fy * H
+            a = int(14 + 40 * depth)
+            p.setPen(QPen(QColor(150, 200, 235, a), 1))
+            p.drawPoint(QPointF(sx, sy))
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
         cos_y, sin_y = math.cos(self._yaw), math.sin(self._yaw)
         cos_p, sin_p = math.cos(self._pitch), math.sin(self._pitch)
 
@@ -781,7 +826,9 @@ class KnowledgeNetCanvas(QWidget):
             na, nb = self._nodes[a], self._nodes[b]
             dim = na.cat in self._dimmed or nb.cat in self._dimmed
             pavg = (na.pp + nb.pp) * 0.5
-            alpha = int((26 + 62 * max(0.0, pavg - 0.66) / 0.75) * (1.0 if not dim else 0.22))
+            breath = 0.86 + 0.14 * math.sin(self._tickn * 0.028 + k * 0.613)
+            alpha = int((26 + 62 * max(0.0, pavg - 0.66) / 0.75)
+                        * breath * (1.0 if not dim else 0.22))
             if alpha < 6:
                 continue
             rgb = self._edge_rgb[k]
@@ -831,6 +878,38 @@ class KnowledgeNetCanvas(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(QPen(QColor(255, 255, 255, 60), 1))
             p.drawEllipse(QPointF(nd.sx, nd.sy), cr * 1.06, cr * 1.06)
+
+        # ── data packets streaming along links ───────────────────────────
+        p.setPen(Qt.PenStyle.NoPen)
+        for kf, t, _spd in self._packets:
+            a, b = self._edges[int(kf) % len(self._edges)]
+            na, nb = self._nodes[a], self._nodes[b]
+            if na.cat in self._dimmed or nb.cat in self._dimmed:
+                continue
+            tt = max(0.0, min(1.0, t))
+            # trail: 3 dots, newest brightest
+            for back, bright, rad in ((0.040, 70, 1.2), (0.018, 125, 1.6), (0.0, 255, 2.4)):
+                tb = tt - back
+                if tb < 0:
+                    continue
+                x = na.sx + (nb.sx - na.sx) * tb
+                y = na.sy + (nb.sy - na.sy) * tb
+                mid_pp = (na.pp + nb.pp) * 0.5
+                col = qcol(C.WHITE)
+                col.setAlpha(int(bright * min(1.0, mid_pp)))
+                p.setBrush(QBrush(col))
+                p.drawEllipse(QPointF(x, y), rad, rad)
+
+        # ── sonar rings from random hubs ─────────────────────────────────
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for hub_f, r in self._sonar:
+            nd = self._nodes[int(hub_f)]
+            if nd.cat in self._dimmed:
+                continue
+            sr = r * nd.pp
+            a = max(0, int(70 * (1.0 - r / 320.0)))
+            p.setPen(QPen(qcol(C.PRI, a), 1.2))
+            p.drawEllipse(QRectF(nd.sx - sr, nd.sy - sr, sr * 2, sr * 2))
 
         # ── hover highlight ──────────────────────────────────────────────
         self._hover_scr = None
@@ -890,6 +969,33 @@ class KnowledgeNetCanvas(QWidget):
 
         self._paint_legend(p, W)
         self._paint_caption(p, W, H)
+
+        # ── scan sweep band (top → bottom every ~9 s) ────────────────────
+        sweep_y = ((self._tickn * 2.2) % (H + 160)) - 80
+        sw = QLinearGradient(0, sweep_y, 0, sweep_y + 64)
+        sw.setColorAt(0.0, QColor(0, 0, 0, 0))
+        pc = qcol(C.PRI)
+        sw.setColorAt(0.5, QColor(pc.red(), pc.green(), pc.blue(), 14))
+        sw.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.fillRect(QRectF(0, sweep_y, W, 64), QBrush(sw))
+
+        # ── HUD chrome: corner brackets + centre reticle ─────────────────
+        bc = qcol(C.PRI, 90)
+        p.setPen(QPen(bc, 1.6))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        bl = 22
+        for bx, by, dx, dy in [(10, 10, 1, 1), (W - 10, 10, -1, 1),
+                               (10, H - 10, 1, -1), (W - 10, H - 10, -1, -1)]:
+            p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
+            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
+        ret = qcol(C.PRI, 50)
+        p.setPen(QPen(ret, 1))
+        rr = 34
+        p.drawEllipse(QRectF(cx - rr, cy - rr, rr * 2, rr * 2))
+        for deg in (0, 90, 180, 270):
+            rad = math.radians(deg)
+            p.drawLine(QPointF(cx + (rr + 4) * math.cos(rad), cy - (rr + 4) * math.sin(rad)),
+                       QPointF(cx + (rr + 12) * math.cos(rad), cy - (rr + 12) * math.sin(rad)))
         p.end()
 
     # ── legend (top-right) ───────────────────────────────────────────────
@@ -990,6 +1096,8 @@ class JarvisPanel(QWidget):
         self._pulses: list[float] = [0.0, 60.0, 120.0]
         self._blink = True
         self._blink_tick = 0
+        self._tele: tuple[float, float] = (0.0, 0.0)     # (cpu, mem) %
+        self._tele_t = 0.0
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
@@ -1045,6 +1153,15 @@ class JarvisPanel(QWidget):
         if self._blink_tick >= 34:
             self._blink = not self._blink
             self._blink_tick = 0
+        # real system telemetry for the micro-header (every ~2 s)
+        if now - self._tele_t > 2.0:
+            self._tele_t = now
+            try:
+                snap = _metrics.snapshot()
+                self._tele = (float(snap.get("cpu", 0) or 0),
+                              float(snap.get("mem", 0) or 0))
+            except Exception:
+                pass
         self.update()
 
     # ── frame ────────────────────────────────────────────────────────────
@@ -1071,6 +1188,33 @@ class JarvisPanel(QWidget):
         p.setPen(QPen(qcol(C.PRI, 46), 1))
         p.drawLine(1, 0, 1, H)
 
+        # micro-header: NEURAL CORE + live telemetry (CPU / MEM)
+        fh = QFont("Courier New", 7, QFont.Weight.Bold)
+        fh.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 190)
+        p.setFont(fh)
+        p.setPen(qcol(C.PRI, 130))
+        p.drawText(10, 15, "◈ NEURAL CORE")
+        cpu, mem = self._tele
+        tele = f"CPU {cpu:.0f}% · MEM {mem:.0f}%"
+        p.setPen(qcol(C.TEXT_DIM, 130))
+        p.drawText(QRectF(0, 6, W - 10, 14), Qt.AlignmentFlag.AlignRight, tele)
+        dot_on = self._blink and not self.muted
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(qcol(C.GREEN if dot_on else C.TEXT_DIM, 200)))
+        p.drawEllipse(QPointF(W - 10 - p.fontMetrics().horizontalAdvance(tele) - 14, 12), 3, 3)
+        p.setPen(QPen(qcol(C.BORDER, 140), 1))
+        p.drawLine(8, 22, W - 8, 22)
+
+        # diagonal scanline sweeping the panel (~every 5 s)
+        sx = ((self._tick * 2.4) % (W + 160)) - 80
+        sg = QLinearGradient(sx - 18, 0, sx + 18, 0)
+        sg.setColorAt(0.0, QColor(0, 0, 0, 0))
+        sg.setColorAt(0.5, QColor(pri.red(), pri.green(), pri.blue(), 13))
+        sg.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(sg))
+        p.drawRect(QRectF(sx - 18, 24, 36, H - 24))
+
         self._paint_reactor(p, W, pri)
         self._paint_status(p, W)
         self._paint_badge(p, W)
@@ -1088,8 +1232,16 @@ class JarvisPanel(QWidget):
     # ── the circular reactor ─────────────────────────────────────────────
     def _paint_reactor(self, p: QPainter, W: int, pri: QColor):
         R = min(W * 0.415, 136.0)
-        cx, cy = W / 2, 30 + R
+        cx, cy = W / 2, 46 + R
         halo_a = max(0, min(255, int(self._halo)))
+
+        # distant orbit arcs framing the whole reactor
+        ro = R + 22
+        recto = QRectF(cx - ro, cy - ro, ro * 2, ro * 2)
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 42), 1.2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for off in (0, 120, 240):
+            p.drawArc(recto, int(((self._rings[2] * 0.6) + off) * 16), int(46 * 16))
 
         # pulse rings travelling outward
         for pr in self._pulses:
@@ -1188,6 +1340,17 @@ class JarvisPanel(QWidget):
                              min(255, 150 + halo_a // 2)), 1.7))
         p.drawEllipse(QRectF(cx - r_in, cy - r_in, r_in * 2, r_in * 2))
 
+        # slow rotating hexagon frame inside the core
+        hexr = r_in * 0.86
+        p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), 34), 0.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        pts = []
+        for i in range(6):
+            ang = math.radians(self._dial * 0.22 + i * 60)
+            pts.append(QPointF(cx + hexr * math.cos(ang), cy - hexr * math.sin(ang)))
+        for i in range(6):
+            p.drawLine(pts[i], pts[(i + 1) % 6])
+
         # centre name — dotted, letter-spaced, glowing
         name = self._dotted_name()
         # fit inside the core: width ≈ fsz · len · 0.60 · spacing(1.26)
@@ -1201,6 +1364,23 @@ class JarvisPanel(QWidget):
         p.setPen(QColor(200, 251, 255, 245))
         p.drawText(QRectF(cx - r_in, cy - r_in * 0.30, r_in * 2, r_in * 0.6),
                    Qt.AlignmentFlag.AlignCenter, name)
+
+        # spectrum arc — radial EQ bars just outside the tick dial
+        eb_in = R + 3
+        for i in range(28):
+            ang = math.radians(i * (360.0 / 28) + self._dial * 0.5)
+            if self.muted:
+                h = 2.0
+                a_e = 60
+            elif self.speaking:
+                h = random.uniform(3.0, 13.0)
+                a_e = 200
+            else:
+                h = 2.5 + 1.5 * math.sin(self._tick * 0.1 + i * 0.9)
+                a_e = 70
+            p.setPen(QPen(QColor(pri.red(), pri.green(), pri.blue(), a_e), 1.8))
+            p.drawLine(QPointF(cx + eb_in * math.cos(ang), cy - eb_in * math.sin(ang)),
+                       QPointF(cx + (eb_in + h) * math.cos(ang), cy - (eb_in + h) * math.sin(ang)))
 
     # ── status line ──────────────────────────────────────────────────────
     def _status_style(self) -> tuple[str, QColor]:
@@ -1219,7 +1399,7 @@ class JarvisPanel(QWidget):
 
     def _paint_status(self, p: QPainter, W: int):
         R = min(W * 0.415, 136.0)
-        y = 30 + R * 2 + 24
+        y = 46 + R * 2 + 24
         txt, col = self._status_style()
 
         f = QFont("Courier New", 13, QFont.Weight.Bold)
@@ -1279,7 +1459,7 @@ class JarvisPanel(QWidget):
     # ── model badge pill ─────────────────────────────────────────────────
     def _paint_badge(self, p: QPainter, W: int):
         R = min(W * 0.415, 136.0)
-        y = 30 + R * 2 + 24 + 26 + 38
+        y = 46 + R * 2 + 24 + 26 + 38
 
         # hairline divider
         p.setPen(QPen(qcol(C.BORDER, 160), 1))
