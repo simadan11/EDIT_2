@@ -16,6 +16,10 @@ Internet Tunnel (🌐) — доступ к EDIT из любой точки че�
      существует туннель в веб-дашборде playit. Первый запуск печатает
      claim-ссылку вида https://playit.gg/claim/XXXX — агент привязывается
      к аккаунту, туннель настраивается в веб-панели (TCP → 127.0.0.1:8001).
+  4. portmap.io + OpenVPN     — стандартный клиент openvpn + их .ovpn-профиль
+     (config/portmap.ovpn). Публичный адрес задаётся в кабинете portmap
+     (yourname.portmap.io:PORT) и прописывается в конфиг EDIT:
+     "tunnel_engine": "portmap" + "tunnel_static_url".
 
 Для постоянного адреса (Cloudflare-путь): бесплатный аккаунт Cloudflare +
 named tunnel (см. README) — достаточно задать статический URL в конфиге.
@@ -45,6 +49,56 @@ _PLAYIT_SKIP = {"playit.gg", "ping.playit.gg", "api.playit.gg", "new.playit.gg",
                 "account.playit.gg", "docs.playit.gg"}
 # привязка агента к аккаунту (первый запуск на новой машине)
 _PLAYIT_CLAIM_RE = re.compile(r"https://playit\.gg/claim/[A-Za-z0-9\-_]+")
+
+# openvpn (portmap.io): признак, что туннель поднялся
+_OVPN_READY = "Initialization Sequence Completed"
+
+
+def _find_portmap_ovpn() -> Path | None:
+    """config/portmap.ovpn или первый *.ovpn в config/."""
+    cfg_dir = TunnelManager.config_path().parent
+    main = cfg_dir / "portmap.ovpn"
+    if main.exists():
+        return main
+    try:
+        for f in sorted(cfg_dir.glob("*.ovpn")):
+            return f
+    except Exception:
+        pass
+    return None
+
+
+def _norm_public_url(u: str) -> str:
+    """'name.portmap.host:12345' / 'tcp://…' → 'https://name.portmap.host:12345'."""
+    u = (u or "").strip().strip("'\"").rstrip("/")
+    if not u:
+        return ""
+    if u.lower().startswith(("tcp://", "udp://")):      # схема из панели portmap
+        u = "https://" + u.split("://", 1)[1]
+    if not re.match(r"https?://", u, re.I):
+        u = "https://" + u
+    return u
+
+
+def portmap_hint() -> str:
+    """Инструкция по настройке portmap.io + OpenVPN (показывается в EDIT)."""
+    return "\n".join([
+        "portmap.io + OpenVPN — настройка (один раз):",
+        "",
+        "  1. Аккаунт: https://portmap.io  (бесплатно)",
+        "  2. Создай Configuration → Tunnel → Protocol: TCP",
+        "     → Local port: 8001   (HTTPS-алиас дашборда EDIT)",
+        "     portmap назначит адрес вида  ваше-имя.portmap.io:12345",
+        "  3. Скачай их .ovpn-профиль → положи в  config\\portmap.ovpn",
+        "  4. Установи OpenVPN:  https://openvpn.net/community-downloads/",
+        "     (Windows: 'OpenVPN Windows Installer', нужны права админа — TAP-адаптер)",
+        "  5. В config\\api_keys.json запиши адрес:",
+        '       "tunnel_engine": "portmap",',
+        '       "tunnel_static_url": "https://ваше-имя.portmap.io:12345"',
+        "  6. Перезапусти EDIT и нажми 🌐.",
+        "",
+        "  Телефон (4G): открыть адрес → 1 раз принять сертификат → PIN.",
+    ])
 
 
 def _find_bin(names: list[str]) -> str | None:
@@ -81,15 +135,35 @@ def ngrok_bin() -> str | None:
 def playit_bin() -> str | None:
     return _find_bin(["playit", "playit.exe", "playit-cli", "playit-agent"])
 
-_BINS = {"cloudflared": cloudflared_bin, "ngrok": ngrok_bin, "playit": playit_bin}
+
+def openvpn_bin() -> str | None:
+    """Стандартный клиент OpenVPN — движок для portmap.io-туннелей."""
+    p = _find_bin(["openvpn", "openvpn.exe"])
+    if p:
+        return p
+    if platform.system() == "Windows":
+        for cand in (
+            Path(r"C:\Program Files\OpenVPN\bin\openvpn.exe"),
+            Path(r"C:\Program Files (x86)\OpenVPN\bin\openvpn.exe"),
+        ):
+            if cand.exists():
+                return str(cand)
+    return None
+
+
+_BINS = {"cloudflared": cloudflared_bin, "ngrok": ngrok_bin,
+         "playit": playit_bin, "portmap": openvpn_bin}
+# portmap сознательно НЕ входит в auto: OpenVPN стоит у многих «для себя»,
+# его наличие не значит «хочу туннель через portmap» — только явный выбор.
+_AUTO_ORDER = ("cloudflared", "ngrok", "playit")
 
 
 def engine() -> str | None:
-    """Which tunnel engine: 'cloudflared' | 'ngrok' | 'playit' | None.
+    """Which tunnel engine: 'cloudflared' | 'ngrok' | 'playit' | 'portmap' | None.
 
     Принудительный выбор: "tunnel_engine" в config/api_keys.json
-    ("playit" / "cloudflared" / "ngrok" / "auto"). При "auto" берётся первый
-    установленный движок.
+    ("playit" / "cloudflared" / "ngrok" / "portmap" / "auto").
+    При "auto" берётся первый установленный движок (кроме portmap — только явно).
     """
     pref = "auto"
     try:
@@ -99,8 +173,8 @@ def engine() -> str | None:
         pass
     if pref in _BINS:
         return pref                                    # явный выбор пользователя
-    for name, fn in _BINS.items():
-        if fn():
+    for name in _AUTO_ORDER:
+        if _BINS[name]():
             return name
     return None
 
@@ -129,6 +203,10 @@ def install_hint() -> str:
         "  ngrok:",
         "    https://ngrok.com/download  (или:  npm i -g ngrok / winget install ngrok)",
         "",
+        "  portmap.io + OpenVPN (постоянный адрес, бесплатно):",
+        "    см. полную инструкцию — в readme.md, раздел Internet Access, вариант D,",
+        "    или: «tunnel_engine»: «portmap» в config/api_keys.json после настройки.",
+        "",
         "После установки перезапусти EDIT — кнопка 🌐 заработает.",
     ]
     return "\n".join(lines)
@@ -154,7 +232,7 @@ class TunnelManager:
     @property
     def url(self) -> str:
         with self._lock:
-            return self._url or self._static_url
+            return self._url or _norm_public_url(self._static_url)
 
     @property
     def active(self) -> bool:
@@ -186,15 +264,22 @@ class TunnelManager:
         with self._lock:
             if self._proc is not None and self._proc.poll() is None:
                 return self.status()
-            if self._static_url:
-                self._url = self._static_url
-                return self.status()
             eng = engine()
+            if self._static_url and eng != "portmap":
+                # чисто-служебный статический URL (Cloudflare named tunnel и т.п.)
+                self._url = _norm_public_url(self._static_url)
+                return self.status()
             if not eng:
                 return {"active": False, "error": "no_tunnel_binary",
                         "hint": install_hint()}
             exe = _BINS[eng]()
-            if not exe:
+            if eng == "portmap":
+                ovpn = _find_portmap_ovpn()
+                if not exe or not ovpn or not self._static_url:
+                    # openvpn не установлен / нет .ovpn / не задан адрес
+                    return {"active": False, "error": "no_tunnel_binary",
+                            "engine": "portmap", "hint": portmap_hint()}
+            elif not exe:
                 # движок выбран в конфиге ("tunnel_engine"), но не установлен
                 return {"active": False, "error": "no_tunnel_binary", "engine": eng,
                         "hint": install_hint()}
@@ -209,6 +294,11 @@ class TunnelManager:
                 # playit-агент сам поднимает все туннели аккаунта;
                 # публичный адрес назначен в веб-панели playit.gg
                 cmd = [exe]
+            elif eng == "portmap":
+                # стандартный OpenVPN-клиент с профилем из кабинета portmap.io;
+                # публичный адрес известен заранее (задан в tcp://... виде в панели)
+                self._url = _norm_public_url(self._static_url)
+                cmd = [exe, "--config", str(ovpn), "--auth-nocache"]
             else:  # ngrok
                 cmd = [exe, "http", str(self._port), "--log", "stdout"]
             self._proc = subprocess.Popen(
@@ -290,6 +380,14 @@ class TunnelManager:
                     self._ready.set()
                     buf = buf[am.end():]
                     break
+                if len(buf) > 4096:
+                    buf = buf[-2048:]
+                continue
+            if eng == "portmap":
+                # openvpn: туннель поднят, когда инициализация завершена
+                if _OVPN_READY in buf:
+                    self._ready.set()
+                    buf = buf.split(_OVPN_READY, 1)[1]
                 if len(buf) > 4096:
                     buf = buf[-2048:]
                 continue

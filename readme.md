@@ -99,6 +99,30 @@ To turn it off: press **🌐** again or say *«выключи интернет �
 > 🔒 Quick-tunnel URL is random on every start. For a **permanent** address use playit.gg (above) or a free Cloudflare account + named tunnel, and put the stable URL in `config/api_keys.json` → `tunnel_static_url` (полный автомат: `cloudflare/setup-remote-control.ps1`). Auth still applies (PIN / paired device token), and API/WS traffic is never cached by the service worker.
 > 📶 Voice over mobile data works but latency is higher than on LAN — fine for commands, slightly delayed for back-and-forth conversation.
 
+### Вариант D — portmap.io + OpenVPN (ваша постоянная точка входа)
+
+portmap.io даёт постоянный адрес вида `tcp://ваше-имя.portmap.host:37061`;
+туннель держит обычный клиент **OpenVPN** с их профилем.
+
+1. https://portmap.io → регистрация → **Create new configuration** →
+   Protocol: **TCP**, Local IP `127.0.0.1`, Local port **8001** → Create.
+2. В разделе конфигурации скачайте **.ovpn-профиль** → положите его в
+   `config\portmap.ovn` → переименуйте в **`config\portmap.ovpn`**.
+3. Установите OpenVPN: https://openvpn.net/community-downloads/
+   (Windows Installer; нужен админ — ставится TAP-адаптер).
+4. В `config/api_keys.json` (уже выставлено для адреса Danz…):
+   `"tunnel_engine": "portmap"`,
+   `"tunnel_static_url": "https://ваше-имя.portmap.host:37061"`.
+5. Запустите EDIT → ⚙️ → **🌐 INTERNET ACCESS** → статус ON.
+6. Телефон (4G): открыть адрес → 1 раз принять самоподписанный сертификат →
+   PIN → «Добавить на главный экран».
+
+> Если браузер пишет SSL-ошибку вместо «принять риск» — в п.1 маппинг сделан
+> на порт 8000: тогда открывайте через `http://…` (и поменяйте схему в
+> `tunnel_static_url`). Для 8001 (`https://`) — как написано выше.
+> Бесплатный portmap имеет тайм-ауты по неактивности — процесс OpenVPN сам
+> переподключится; при долгом простое телефон просто обновляет страницу.
+
 ### Вариант C — Mesh-VPN (Tailscale / ZeroTier) — самый приватный
 
 Телефон и ПК входят в **одну виртуальную сеть**: ПК получает постоянный IP

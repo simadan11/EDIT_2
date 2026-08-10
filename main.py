@@ -729,7 +729,8 @@ TOOL_DECLARATIONS = [
     {
         "name": "internet_access",
         "description": (
-            "Toggles a public HTTPS tunnel (playit.gg/Cloudflare/ngrok) so EDIT's Remote "
+            "Toggles a public HTTPS tunnel (playit.gg/portmap.io/Cloudflare/ngrok) "
+            "so EDIT's Remote "
             "Dashboard is reachable from the phone over MOBILE DATA when there "
             "is no WiFi (e.g. away from home). Provides an internet URL like "
             "https://xxx.at.ply.gg:12345 (playit, fixed) or "

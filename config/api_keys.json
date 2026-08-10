@@ -4,5 +4,6 @@
     "live_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
     "headphones_mode": false,
     "wake_bracket": true,
-    "tunnel_engine": "playit"
+    "tunnel_engine": "portmap",
+    "tunnel_static_url": "https://Danz030123-37061.portmap.host:37061"
 }
