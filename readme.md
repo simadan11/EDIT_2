@@ -48,6 +48,7 @@ It's not just an assistant — it's an extension of your digital life.
 | 🎧 Headphones Mode | Bluetooth headphones paired to the phone or the PC become a hands-free channel: EDIT speaks through them, hears you via the headset mic, and the headphone's own button is push-to-listen |
 | 📷 Phone Camera Vision | EDITH-style scan from the phone camera — labels people, cars & plates on a live HUD, JARVIS answers by voice on PC **and** phone |
 | ◈ Holo Lab | Create any hologram/blueprint, assemble a buy/make BOM, run diagnostics and print a build report — smart glasses, robot, vehicle, building, planet or custom geometry |
+| 🏋️ Personal Trainer | Workout & nutrition plan (persistent), workout/weight/sleep logging, progress stats with streaks, sleep analysis with score, daily motivational push at your time — data stays local (`~/.jarvis/personal_trainer.json`) |
 | ⚡ Auto-Start on Boot | Registers with the OS startup system (registry / LaunchAgent / .desktop) |
 | 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
 | 🎨 Assistant Customization | Change the assistant name and your name from the UI — takes effect immediately |

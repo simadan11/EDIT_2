@@ -74,6 +74,7 @@ from actions.open_app          import open_app
 from actions.weather_report    import weather_action
 from actions.send_message      import send_message
 from actions.reminder          import reminder
+from actions.personal_trainer  import trainer_action, motivation_due
 from actions.computer_settings import computer_settings
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.youtube_video     import youtube_video
@@ -1002,6 +1003,48 @@ TOOL_DECLARATIONS = [
             "required": ["query"]
         }
     },
+    {
+        "name": "personal_trainer",
+        "description": (
+            "Personal trainer / личный тренер: workout & nutrition plan, progress "
+            "tracking, sleep analysis, motivational pushes. Actions: "
+            "'setup' (goal/level/days_per_week/equipment/weight_kg/height_cm), "
+            "'save_plan' (plan_text — save the generated plan), "
+            "'today' (what's planned today), 'log_workout' (type/duration_min/"
+            "intensity/notes), 'log_weight' (kg), 'log_sleep' (bed/wake or hours, "
+            "quality 1-5), 'progress' (stats summary), 'sleep_analysis', "
+            "'motivation' (enabled + time). Call when the user says: тренер, "
+            "тренировка, план тренировок, питание, прогресс, сон, спал, вес, "
+            "качаться, спортзал, мотивация, workout, fitness, gym, nutrition, "
+            "sleep, weight, trainer, personal trainer, etc."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":        {"type": "STRING",
+                                  "description": "setup|save_plan|today|log_workout|log_weight|log_sleep|progress|sleep_analysis|motivation"},
+                "goal":          {"type": "STRING", "description": "fitness goal, e.g. 'похудеть до 75 кг'"},
+                "level":         {"type": "STRING", "description": "beginner | intermediate | advanced"},
+                "equipment":     {"type": "STRING", "description": "available gear, e.g. 'гиря, турник'"},
+                "days_per_week": {"type": "NUMBER"},
+                "weight_kg":     {"type": "NUMBER"},
+                "height_cm":     {"type": "NUMBER"},
+                "plan_text":     {"type": "STRING", "description": "full workout/nutrition plan text to remember"},
+                "type":          {"type": "STRING", "description": "workout type, e.g. 'силовая', 'кардио'"},
+                "duration_min":  {"type": "NUMBER"},
+                "intensity":     {"type": "STRING", "description": "easy | normal | hard"},
+                "notes":         {"type": "STRING"},
+                "kg":            {"type": "NUMBER", "description": "weight in kilograms (log_weight)"},
+                "bed":           {"type": "STRING", "description": "bedtime HH:MM"},
+                "wake":          {"type": "STRING", "description": "wake time HH:MM"},
+                "hours":         {"type": "NUMBER", "description": "slept hours (alternative to bed/wake)"},
+                "quality":       {"type": "NUMBER", "description": "sleep quality 1-5"},
+                "enabled":       {"type": "BOOLEAN", "description": "motivation push on/off"},
+                "time":          {"type": "STRING", "description": "motivation time HH:MM, e.g. '07:30'"}
+            },
+            "required": ["action"]
+        }
+    },
 ]
 
 # --- Dynamic Skills & Self-Improvement System ---
@@ -1852,6 +1895,10 @@ class JarvisLive:
             elif name == "reminder":
                 r = await loop.run_in_executor(None, lambda: reminder(parameters=args, response=None, player=self.ui))
                 result = r or "Reminder set."
+
+            elif name == "personal_trainer":
+                r = await loop.run_in_executor(None, lambda: trainer_action(parameters=args, player=self.ui))
+                result = r or "Trainer updated."
 
             elif name == "youtube_video":
                 r = await loop.run_in_executor(None, lambda: youtube_video(parameters=args, response=None, player=self.ui))
@@ -2713,6 +2760,32 @@ class JarvisLive:
                 speaking = self._is_speaking
             if speaking:
                 continue
+
+            # 📚 Personal trainer — ежедневный мотивационный толчок
+            try:
+                _mot = motivation_due()
+            except Exception:
+                _mot = None
+            if _mot:
+                try:
+                    _ctx = (
+                        "[FITNESS TRAINER — daily motivation push]\n"
+                        f"User goal: {_mot.get('goal') or '—'}; workout streak: "
+                        f"{_mot.get('streak', 0)} day(s); sleep avg: "
+                        f"{_mot.get('sleep_avg') or '—'} h; today from the plan: "
+                        f"{(_mot.get('today_plan') or 'no specific session today')}\n"
+                        "Deliver ONE short, energetic motivational message in the "
+                        "user's own language (max 2 sentences). Mention today's "
+                        "workout if present. No questions."
+                    )
+                    await self.session.send_client_content(
+                        turns={"parts": [{"text": _ctx}]},
+                        turn_complete=True,
+                    )
+                    self.ui.write_log("SYS: Trainer motivation push.")
+                    continue
+                except Exception as e:
+                    print(f"[Trainer] motivation hook: {e}")
 
             if not self._proactive.should_trigger(self._last_user_speech):
                 continue
