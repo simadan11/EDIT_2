@@ -99,6 +99,29 @@ To turn it off: press **🌐** again or say *«выключи интернет �
 > 🔒 Quick-tunnel URL is random on every start. For a **permanent** address use playit.gg (above) or a free Cloudflare account + named tunnel, and put the stable URL in `config/api_keys.json` → `tunnel_static_url` (полный автомат: `cloudflare/setup-remote-control.ps1`). Auth still applies (PIN / paired device token), and API/WS traffic is never cached by the service worker.
 > 📶 Voice over mobile data works but latency is higher than on LAN — fine for commands, slightly delayed for back-and-forth conversation.
 
+### Вариант C — Mesh-VPN (Tailscale / ZeroTier) — самый приватный
+
+Телефон и ПК входят в **одну виртуальную сеть**: ПК получает постоянный IP
+вида `100.x.x.x`, телефон открывает `http://100.x.x.x:8000` как будто вы дома
+— без каких-либо публичных URL вообще. Трафик шифрован (WireGuard), сторонние
+серверы нужны только для «сведения» пиров, бесплатно (личный тариф).
+
+1. Заведите аккаунт https://tailscale.com (вход через Google/GitHub — 1 мин).
+2. Поставьте Tailscale **на ПК** и **на телефон** (приложение из магазина) и
+   войдите в оба под одним аккаунтом.
+3. В админке tailscale посмотрите IP ПК (`100.…`) или включите MagicDNS —
+   тогда адрес вида `http://имя-пк.ваша-сеть.ts.net:8000`.
+4. На телефоне: включить Tailscale → открыть `http://100.x.x.x:8000` → PIN →
+   «Добавить на главный экран». Готово: работает на мобильном интернете,
+   туннелей и доменов вообще нет, максимум приватности.
+
+> **Чистый OpenVPN** (если принципиально): нужен сервер — либо дома с пробросом
+> `1194/udp` на роутере (тогда Playit не нужен, но нужен доступ к роутеру и
+> белый/DDNS-адрес), либо VPS в облаке за деньги, на котором поднят
+> OpenVPN-сервер; телефон подключается приложением *OpenVPN Connect* и дальше
+> всё как в варианте C (`http://10.8.0.1:8000`). Смысла нет: то же самое даёт
+> Tailscale бесплатно и без проброса портов.
+
 ---
 
 ## 🤖 Publish EDIT Remote as a native Android app (Google Play)
