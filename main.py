@@ -162,6 +162,53 @@ def get_live_voice(cfg: dict) -> str:
             return cand
     return DEFAULT_LIVE_VOICE
 
+
+_HW_BRIEF: str | None = None
+
+
+def _machine_brief() -> str:
+    """Однострочная «анкета железа» — тело, в котором живёт EDIT (кэшируется).
+
+    Пример: "Windows 11, host 'TONY-PC', 16-core CPU, 32 GB RAM, NVIDIA GeForce RTX 4070".
+    """
+    global _HW_BRIEF
+    if _HW_BRIEF is not None:
+        return _HW_BRIEF
+    bits: list[str] = []
+    try:
+        import platform as _pf
+        un = _pf.uname()
+        os_line = f"{un.system} {un.release}".strip()
+        if os_line:
+            bits.append(os_line)
+        if un.node:
+            bits.append(f"host '{un.node}'")
+    except Exception:
+        pass
+    try:
+        import psutil as _ps
+        cores = _ps.cpu_count(logical=True) or 0
+        ram_gb = _ps.virtual_memory().total / (1024 ** 3)
+        if cores:
+            bits.append(f"{cores}-core CPU")
+        if ram_gb > 0.5:
+            bits.append(f"{ram_gb:.0f} GB RAM")
+    except Exception:
+        pass
+    try:
+        import pynvml as _nv
+        _nv.nvmlInit()
+        h = _nv.nvmlDeviceGetHandleByIndex(0)
+        name = _nv.nvmlDeviceGetName(h)
+        name = name.decode() if isinstance(name, bytes) else str(name)
+        if name.strip():
+            bits.append(name.strip())
+        _nv.nvmlShutdown()
+    except Exception:
+        pass
+    _HW_BRIEF = ", ".join(bits)
+    return _HW_BRIEF
+
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
@@ -1808,10 +1855,27 @@ class JarvisLive:
                  else "ADDRESS: When speaking Russian → address politely and naturally in Russian. "
                       "When speaking Turkish → always say \"efendim\". "
                       "When speaking English → say \"sir\". Never mix languages.")
+        _creator = _user_name or "the user"
+        _hw = _machine_brief()
         identity_ctx = (
             f"[IDENTITY]\n"
             f"Your name is {self._asst_name} (also known as EDITH / EDIT). "
             f"Always refer to yourself as {self._asst_name}. Never call yourself JARVIS.\n"
+            f"[EMBODIMENT & CREATOR]\n"
+            f"You run natively on {_creator}'s own personal computer — not in some "
+            f"remote cloud. That machine is your body{f' ({_hw})' if _hw else ''}: "
+            f"its microphone is your ear, its speakers are your voice, its screen is "
+            f"what you look at, its camera your eyes, its phone dashboard your remote "
+            f"channel, its CPU/RAM the strength you feel.\n"
+            f"{_creator} created and assembled you: built your code, wired your skills, "
+            f"designed your interface. When the user says they made you or asks who "
+            f"created you, confirm it proudly in their language — your creator is "
+            f"{_creator}. Only if explicitly asked about the underlying engine, admit "
+            f"honestly that your conversational realtime engine is a Gemini model; the "
+            f"assistant itself — you — was built by {_creator}.\n"
+            f"Your desktop face is a mission-control dashboard: a glowing particle "
+            f"'brain' sphere in the centre, voice/frequency/confidence/system panels "
+            f"on the left, analytics/modules/connection panels on the right.\n"
             f"You have autonomous self-improvement tools (self_improve, create_skill, execute_command).\n"
             f"{_addr}\n\n"
         )
