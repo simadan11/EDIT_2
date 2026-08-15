@@ -118,22 +118,20 @@ def osint_lookup(
     # ── Direct DDG search (no Gemini — avoids 429 quota) ───────────────────────
     def _ddg_direct(query: str, max_results: int = 6) -> list[str]:
         try:
-            from duckduckgo_search import DDGS
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    from duckduckgo_search import DDGS
             results = []
             with DDGS() as ddgs:
                 for r in ddgs.text(query, max_results=max_results):
                     results.append(f"• {r.get('title','')} — {r.get('href','')}")
             return results
         except Exception:
-            try:
-                from ddgs import DDGS
-                results = []
-                with DDGS() as ddgs:
-                    for r in ddgs.text(query, max_results=max_results):
-                        results.append(f"• {r.get('title','')} — {r.get('href','')}")
-                return results
-            except Exception:
-                return []
+            return []
 
     if mode == "search":
         results = _ddg_direct(target, max_results=5)

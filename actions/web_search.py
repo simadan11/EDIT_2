@@ -39,12 +39,21 @@ def _gemini_search(query: str) -> str:
     return text
 
 
-def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
+def _ddgs_client():
+    """Return a DuckDuckGo client, preferring the maintained ``ddgs`` package."""
+    import warnings
     try:
         from ddgs import DDGS
+        return DDGS
     except ImportError:
-        from duckduckgo_search import DDGS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            from duckduckgo_search import DDGS
+        return DDGS
 
+
+def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
+    DDGS = _ddgs_client()
     results = []
     with DDGS() as ddgs:
         for r in ddgs.text(query, max_results=max_results):
@@ -58,11 +67,7 @@ def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
 
 def _ddg_news(query: str, max_results: int = 8) -> list[dict]:
     """DDG news search — returns actual articles, not website homepages."""
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        from duckduckgo_search import DDGS
-
+    DDGS = _ddgs_client()
     results = []
     try:
         with DDGS() as ddgs:

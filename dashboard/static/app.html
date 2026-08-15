@@ -680,7 +680,16 @@
     function _authHeader() { return { 'Authorization': `Bearer ${_authToken}` }; }
     function _authFetch(url, opts = {}) {
       opts.headers = Object.assign({}, opts.headers, _authHeader());
-      return fetch(url, opts);
+      return fetch(url, opts).then((r) => {
+        if (r.status === 401) {
+          sessionStorage.removeItem('jarvis_token');
+          sessionStorage.removeItem('jarvis_key');
+          localStorage.removeItem('jarvis_device_token');
+          location.replace('/login');
+          throw new Error('Session expired');
+        }
+        return r;
+      });
     }
 
     // ── AES-256-CBC encryption (CryptoJS) ────────────────────────────────────

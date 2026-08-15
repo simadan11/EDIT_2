@@ -42,6 +42,24 @@ BASE_DIR    = Path(__file__).resolve().parent.parent
 STATIC_DIR  = Path(__file__).parent / "static"
 PORT        = 8000
 MAX_UPLOAD_MB = 500
+LOGIN_RATE_WINDOW_SEC = 60
+LOGIN_RATE_MAX_FAILS = 8
+
+
+def _client_ip(req_or_ws) -> str:
+    """Best-effort peer IP for rate limiting/diagnostics (CF/Tunnel aware)."""
+    headers = getattr(req_or_ws, "headers", None)
+    if headers is not None:
+        cf = headers.get("cf-connecting-ip")
+        if cf:
+            return cf.strip()[:64]
+        xff = headers.get("x-forwarded-for", "")
+        first = xff.split(",", 1)[0].strip()
+        if first:
+            return first[:64]
+    client = getattr(req_or_ws, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    return (host or "unknown")[:64]
 
 
 def _make_uploads_dir() -> Path:
@@ -441,6 +459,11 @@ def _decode_frame(body: dict) -> bytes:
         raise _FrameError(
             f"frame too large (max {_MAX_FRAME_BYTES // (1024 * 1024)} MB)", 413
         )
+    is_jpeg = raw[:3] == b"\xff\xd8\xff" and raw[-2:] == b"\xff\xd9"
+    is_png  = raw.startswith(b"\x89PNG\r\n\x1a\n")
+    is_webp = raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    if not (is_jpeg or is_png or is_webp):
+        raise _FrameError("frame must be JPEG/PNG/WebP image bytes", 400)
     return raw
 
 
@@ -567,7 +590,8 @@ class DashboardServer:
         self._audio_sink: str | None      = None   # dev_id of the phone running Headphones Mode
         self._loop                        = None   # asyncio loop (set in serve())
         self._pending_keys: dict[str, float] = {}
-        self._device_sessions: dict[str, dict] = {}  # device_token → {session_key}
+        self._login_failures: dict[str, list[float]] = {}
+        self._device_sessions: dict[str, dict] = {}  # device_token → {session_key, created}
         self._phone_audio_queue: asyncio.Queue    = asyncio.Queue(maxsize=200)
         self._phone_vision_queue: asyncio.Queue   = asyncio.Queue(maxsize=10)
         self._phone_cam_queue: asyncio.Queue      = asyncio.Queue(maxsize=2)  # live stream → PC HUD
@@ -587,7 +611,8 @@ class DashboardServer:
     def new_key(self, expiry_secs: int = 600) -> str:
         now = time.time()
         self._pending_keys = {k: v for k, v in self._pending_keys.items() if v > now}
-        key = ''.join(secrets.choice(_KEY_CHARS) for _ in range(6))
+        # 8 chars from an unambiguous alphabet: safer for remote/Cloudflare exposure.
+        key = ''.join(secrets.choice(_KEY_CHARS) for _ in range(8))
         self._pending_keys[key] = now + expiry_secs
         return key
 
@@ -619,6 +644,24 @@ class DashboardServer:
             return _decrypt_cbc(self._aes_key(sk), enc_b64)
         except Exception:
             return None
+
+    def _login_too_many_failures(self, ip: str) -> bool:
+        now = time.time()
+        cutoff = now - LOGIN_RATE_WINDOW_SEC
+        fails = [t for t in self._login_failures.get(ip, ()) if t > cutoff]
+        self._login_failures[ip] = fails
+        return len(fails) >= LOGIN_RATE_MAX_FAILS
+
+    def _record_login_failure(self, ip: str) -> None:
+        now = time.time()
+        fails = self._login_failures.setdefault(ip, [])
+        fails.append(now)
+        if len(fails) > 100:
+            self._login_failures[ip] = [t for t in fails if t > now - LOGIN_RATE_WINDOW_SEC]
+
+    def _is_paired_device(self, dev_tok: str) -> bool:
+        rec = self._device_sessions.get(dev_tok)
+        return isinstance(rec, dict) and "session_key" in rec
 
     # ── callbacks ────────────────────────────────────────────────────────
 
@@ -895,9 +938,34 @@ class DashboardServer:
     def _build_app(self) -> "FastAPI":
         app = FastAPI(docs_url=None, redoc_url=None)
 
+        @app.middleware("http")
+        async def _security_middleware(request: Request, call_next):
+            # Reject oversized JSON/control bodies early. File uploads are handled
+            # separately and already enforce MAX_UPLOAD_MB while streaming.
+            if request.url.path.startswith("/api/") and request.url.path != "/api/upload":
+                length = request.headers.get("content-length")
+                if length and length.isdigit() and int(length) > 16 * 1024 * 1024:
+                    return JSONResponse({"error": "Payload too large"}, status_code=413)
+            response = await call_next(request)
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("Referrer-Policy", "no-referrer")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Cache-Control", "no-store")
+            return response
+
         def _auth(req: Request) -> bool:
             tok = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
             return bool(tok) and tok in self._tokens
+
+        def _auth_ws(websocket: WebSocket) -> str | None:
+            tok = websocket.query_params.get("token", "").strip()
+            if not tok:
+                tok = websocket.cookies.get("jarvis_token", "").strip()
+            if not tok:
+                hdr = websocket.headers.get("authorization", "").strip()
+                if hdr.lower().startswith("bearer "):
+                    tok = hdr[7:].strip()
+            return tok if tok and tok in self._tokens else None
 
         # serve CryptoJS from local cache, fallback to CDN redirect
         @app.get("/static/crypto.js")
@@ -925,10 +993,16 @@ class DashboardServer:
                 str(STATIC_DIR / "sw.js"), media_type="application/javascript"
             )
 
-        @app.get("/static/icons/{name}")
+        @app.get("/static/icons/{name:path}")
         async def pwa_icon(name: str):
-            safe = re.sub(r"[^a-zA-Z0-9._-]", "", name)
-            path = STATIC_DIR / "icons" / safe
+            safe = re.sub(r"[^a-zA-Z0-9._/-]", "", name).lstrip("/")
+            if not safe or ".." in safe.split("/"):
+                return JSONResponse({"error": "Not found"}, status_code=404)
+            path = (STATIC_DIR / "icons" / safe).resolve()
+            try:
+                path.relative_to((STATIC_DIR / "icons").resolve())
+            except Exception:
+                return JSONResponse({"error": "Not found"}, status_code=404)
             if path.exists() and path.is_file():
                 return FileResponse(str(path))
             return JSONResponse({"error": "Not found"}, status_code=404)
@@ -961,7 +1035,17 @@ class DashboardServer:
 
         @app.post("/login")
         async def login(req: Request):
-            body    = await req.json()
+            ip = _client_ip(req)
+            if self._login_too_many_failures(ip):
+                return JSONResponse({"ok": False, "error": "Too many attempts. Wait a minute."},
+                                    status_code=429, headers={"Retry-After": "60"})
+            try:
+                body = await req.json()
+                if not isinstance(body, dict):
+                    raise ValueError
+            except Exception:
+                self._record_login_failure(ip)
+                return JSONResponse({"ok": False, "error": "Bad request"}, status_code=400)
             entered = str(body.get("pin", "")).strip().upper()
             now     = time.time()
             if entered in self._pending_keys and self._pending_keys[entered] > now:
@@ -970,6 +1054,7 @@ class DashboardServer:
                 self._tokens.add(tok)
                 self._token_keys[tok] = entered
                 self._aes_key(entered)                   # pre-derive & cache
+                self._login_failures.pop(ip, None)
                 if self._connect_callback:
                     self._connect_callback()
                 asyncio.create_task(self.broadcast(
@@ -977,14 +1062,20 @@ class DashboardServer:
                 ))
                 # Bearer token in response body — no cookies needed (works on any browser/HTTP)
                 return JSONResponse({"ok": True, "token": tok})
+            self._record_login_failure(ip)
             return JSONResponse({"ok": False, "error": "Invalid or expired key"},
                                 status_code=401)
 
         @app.get("/auto-login")
-        async def auto_login(key: str = ""):
+        async def auto_login(req: Request, key: str = ""):
             """QR code target — validates one-time key, creates session, redirects phone."""
+            ip = _client_ip(req)
+            if self._login_too_many_failures(ip):
+                return HTMLResponse("<!doctype html><meta charset='utf-8'>Too many attempts. Try again later.",
+                                    status_code=429)
             now = time.time()
             if not key or key not in self._pending_keys or self._pending_keys[key] <= now:
+                self._record_login_failure(ip)
                 return HTMLResponse("""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width">
 <style>
@@ -1002,7 +1093,8 @@ class DashboardServer:
             self._tokens.add(tok)
             self._token_keys[tok] = key
             self._aes_key(key)
-            self._device_sessions[dev_tok] = {"session_key": key}
+            self._device_sessions[dev_tok] = {"session_key": key, "created": now}
+            self._login_failures.pop(ip, None)
 
             if self._connect_callback:
                 self._connect_callback()
@@ -1030,12 +1122,20 @@ class DashboardServer:
         @app.post("/api/device-login")
         async def device_login_ep(req: Request):
             """Return a fresh auth token for a previously paired device token."""
+            ip = _client_ip(req)
+            if self._login_too_many_failures(ip):
+                return JSONResponse({"ok": False, "error": "Too many attempts"},
+                                    status_code=429, headers={"Retry-After": "60"})
             try:
                 body = await req.json()
+                if not isinstance(body, dict):
+                    raise ValueError
             except Exception:
+                self._record_login_failure(ip)
                 return JSONResponse({"ok": False}, status_code=400)
-            dev_tok = (body.get("device_token") or "").strip()
-            if not dev_tok or dev_tok not in self._device_sessions:
+            dev_tok = str(body.get("device_token") or "").strip()
+            if not dev_tok or not self._is_paired_device(dev_tok):
+                self._record_login_failure(ip)
                 return JSONResponse({"ok": False}, status_code=401)
             session_key = self._device_sessions[dev_tok]["session_key"]
             tok = secrets.token_urlsafe(32)
@@ -1047,6 +1147,7 @@ class DashboardServer:
             asyncio.create_task(self.broadcast(
                 {"type": "sys", "text": "Known device reconnected automatically."}
             ))
+            self._login_failures.pop(ip, None)
             return JSONResponse({"ok": True, "token": tok, "key": session_key})
 
         @app.post("/api/revoke-devices")
@@ -1337,8 +1438,8 @@ class DashboardServer:
         async def phone_cam_ws(websocket: WebSocket, token: str = ""):
             """Continuous JPEG frames from the phone camera; the latest frame is
             what the PC window draws. ~3 fps keeps live preview cheap."""
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            tok = _auth_ws(websocket)
+            if not tok:
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
@@ -1349,6 +1450,11 @@ class DashboardServer:
             try:
                 while True:
                     data = await websocket.receive_bytes()
+                    if len(data) > _MAX_FRAME_BYTES:
+                        await websocket.close(code=1009)
+                        break
+                    if not (data[:3] == b"\xff\xd8\xff" and data[-2:] == b"\xff\xd9"):
+                        continue
                     try:
                         self._phone_cam_queue.put_nowait(data)
                     except asyncio.QueueFull:
@@ -1370,8 +1476,8 @@ class DashboardServer:
 
         @app.websocket("/ws/phone-audio")
         async def phone_audio_ws(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            tok = _auth_ws(websocket)
+            if not tok:
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
@@ -1381,6 +1487,9 @@ class DashboardServer:
             try:
                 while True:
                     data = await websocket.receive_bytes()
+                    if len(data) > 256 * 1024:
+                        await websocket.close(code=1009)
+                        break
                     try:
                         self._phone_audio_queue.put_nowait(
                             {"data": data, "mime_type": "audio/pcm"}
@@ -1476,16 +1585,20 @@ class DashboardServer:
             tok = token.strip()
             if not tok or tok not in self._tokens:
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            safe = re.sub(r'[/\\]', '', filename)
-            path = self._uploads_dir / safe
+            safe = _safe_filename(filename)
+            path = (self._uploads_dir / safe).resolve()
+            try:
+                path.relative_to(self._uploads_dir.resolve())
+            except Exception:
+                return JSONResponse({"error": "Invalid filename"}, status_code=400)
             if not path.exists() or not path.is_file():
                 return JSONResponse({"error": "Not found"}, status_code=404)
             return FileResponse(str(path), filename=safe)
 
         @app.websocket("/ws")
         async def ws_ep(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            tok = _auth_ws(websocket)
+            if not tok:
                 await websocket.close(code=4001)
                 return
             await websocket.accept()

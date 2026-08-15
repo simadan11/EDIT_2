@@ -14,7 +14,16 @@ import threading
 from typing import Callable, Optional
 
 import numpy as np
-import sounddevice as sd
+import warnings as _warnings
+# sounddevice < 0.5.2 still does `data.shape = -1, channels` internally. NumPy 2.5
+# turns that into a deprecation warning that fires on every audio callback.
+with _warnings.catch_warnings():
+    _warnings.filterwarnings(
+        "ignore",
+        message="Setting the shape on a NumPy array has been deprecated",
+        category=DeprecationWarning,
+    )
+    import sounddevice as sd
 
 
 

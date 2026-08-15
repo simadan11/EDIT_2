@@ -1,4 +1,4 @@
-<#
+﻿<#
 ═══════════════════════════════════════════════════════════════════════════
  EDIT — Remote Control "под ключ" за одну команду (Windows 10/11)
 
@@ -245,14 +245,9 @@ if (-not $NoWorker) {
         if (-not $wr) { throw "wrangler не установился" }
         $WR = $wr.Source
 
-        # Секрет: сгенерировать, если в wrangler.toml ещё заглушка
+        # ORIGIN в wrangler.toml. SECRET храним как секрет воркера, а не в git-файле.
         $tomlPath = Join-Path $CfDir "wrangler.toml"
         $toml = Get-Content $tomlPath -Raw
-        if ($toml -match 'SECRET = "change-me-to-a-long-random-string"') {
-            $generated = ([guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N"))
-            $toml = $toml -replace 'SECRET = "change-me-to-a-long-random-string"',
-                                   "SECRET = `"$generated`""
-        }
         $toml = $toml -replace 'ORIGIN = "[^"]*"', "ORIGIN = `"https://$Fqdn`""
         Set-Content -Path $tomlPath -Value $toml -Encoding UTF8
 
@@ -263,11 +258,19 @@ if (-not $NoWorker) {
             _run $WR @("login")
         }
 
+        $generated = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+        $secFile = Join-Path $env:TEMP "edit-worker-secret.txt"
+        try {
+            Set-Content -Path $secFile -Value $generated -Encoding ASCII -NoNewline
+            Get-Content $secFile -Raw | & $WR secret put SECRET --config $tomlPath | Out-Host
+        } finally {
+            Remove-Item $secFile -Force -ErrorAction SilentlyContinue
+        }
+
         $dep = _run $WR @("deploy", "--config", $tomlPath)
         if ($dep -match "(https://[a-zA-Z0-9\-\.]+\.workers\.dev)") {
             $workerUrl = $Matches[1]
-            $sec = ""
-            if ((Get-Content $tomlPath -Raw) -match 'SECRET = "([^"]+)"') { $sec = $Matches[1] }
+            $sec = $generated
             _ok "Worker задеплоен: $workerUrl"
             Write-Host "  Открывать на телефоне:  $workerUrl/?k=$sec" -ForegroundColor Green
             $panelUrl = $workerUrl
@@ -296,10 +299,8 @@ _ok "tunnel_static_url → $panelUrl (internet_tunnel: true)"
 # ── Итог ───────────────────────────────────────────────────────────────────
 _say "ГОТОВО"
 if ($workerUrl) {
-    $sec = ""
-    if ((Get-Content (Join-Path $CfDir "wrangler.toml") -Raw) -match 'SECRET = "([^"]+)"') { $sec = $Matches[1] }
-    Write-Host "  📱 Откройте на телефоне:  $workerUrl/?k=$sec" -ForegroundColor White
-    Write-Host "     (workers.dev — через Workers, SECRET вшит в ссылку)"
+    Write-Host "  📱 Откройте на телефоне:  $workerUrl/?k=<ваш-секрет>" -ForegroundColor White
+    Write-Host "     (workers.dev — через Workers; SECRET задан через wrangler secret)"
 } else {
     Write-Host "  📱 Откройте на телефоне:  https://$Fqdn" -ForegroundColor White
 }

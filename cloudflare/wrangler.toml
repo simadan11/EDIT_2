@@ -3,14 +3,10 @@ name = "edit-remote"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
-# ── Что поменять перед деплоем ─────────────────────────────────────────────
-# ORIGIN — постоянный URL вашего именного туннеля на ПК (Путь A из README),
-#          напр. https://edit.example.com  (быстрый trycloudflare-URL НЕ
-#          подходит — он меняется при каждом запуске).
-# SECRET — ваша длинная случайная строка, вторая «дверь» поверх PIN приложения.
+# ORIGIN — постоянный URL вашего именного туннеля на ПК.
+# SECRET задавайте командой:  wrangler secret put SECRET
 [vars]
 ORIGIN = "https://edit.example.com"
-SECRET = "change-me-to-a-long-random-string"
 
-# Подключение своего домена (необязательно): раскомментируйте и укажите свой.
+# Подключение своего домена (необязательно):
 # routes = [ { pattern = "remote.example.com/*", custom_domain = true } ]

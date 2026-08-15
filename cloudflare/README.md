@@ -86,17 +86,22 @@ npm i -g wrangler
 wrangler login                                 # бесплатный аккаунт Cloudflare
 ```
 
-### 2. Отредактируйте `wrangler.toml`
+### 2. Отредактируйте `wrangler.toml` и задайте секрет
 
 ```toml
 ORIGIN = "https://edit.вашдомен.com"     # ← ваш постоянный hostname из Пути A
-SECRET = "придумайте-длинную-строку"     # ← ваша личная «вторая дверь»
+```
+
+SECRET не пишите в файл (он может попасть в git). Задайте его секретом воркера:
+
+```powershell
+cd cloudflare
+wrangler secret put SECRET
 ```
 
 ### 3. Деплой
 
 ```powershell
-cd cloudflare
 wrangler deploy
 # → https://edit-remote.<ваш-subdomain>.workers.dev
 ```
@@ -110,6 +115,9 @@ wrangler deploy
 На телефоне открываете адрес **с секретом**:
 `https://edit-remote.<sub>.workers.dev/?k=ваш-SECRET` (добавьте в закладки /
 домашний экран PWA — секрет «вшит» в ссылку).
+
+> Безопасность: не публикуйте ссылку с `?k=...`. Для смены ключа выполните
+> `wrangler secret put SECRET` заново и передеплойте воркер.
 
 **Замечания:**
 - WebSocket (голосовой канал, EDITH-камера) Workers проксируют автоматически;
