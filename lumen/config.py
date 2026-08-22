@@ -45,13 +45,16 @@ def default_config() -> Dict[str, Any]:
         "brand": {"name": "LUMEN", "model": "LUMEN-1", "version": "1.0.0"},
         "language": "ru",
         "backend": {
-            # heuristic — встроенный модуль локального рассуждения LUMEN LHC
-            # gemini    — Google Gemini (нужен API-ключ)
-            # openai    — любой OpenAI-совместимый сервер (Ollama, LM Studio…)
-            "provider": "heuristic",
+            # lumen_core — ОСНОВНОЙ модуль: собственный ИИ LUMEN (офлайн, без ключей)
+            # gemini     — внешний модуль Google Gemini (нужен API-ключ)
+            # openai     — внешний OpenAI-совместимый сервер (Ollama, LM Studio…)
+            # overflow_provider — опциональный внешний модуль для свободного
+            #                     текста в гибридном режиме ("" = выключен)
+            "provider": "lumen_core",
             "model": "",
             "api_key": "",
             "base_url": "http://localhost:11434/v1",
+            "overflow_provider": "",
             "temperature": 0.7,
             "max_tokens": 1024,
         },

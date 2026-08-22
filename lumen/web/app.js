@@ -199,7 +199,7 @@ function luminaCard(r) {
       <img src="assets/logo.svg" alt=""/><span class="lumina-name">LUMEN</span>
       ${risk}${intentChip}${conf}
       <span class="lumina-spacer"></span>
-      <span class="chip">${esc(r.backend === "lhc" ? "LHC" : r.backend)} · ${r.latency_ms} мс</span>
+      <span class="chip">${esc({lumen_core: "LUMEN Core", lhc: "LUMEN Core", heuristic: "LUMEN Core"}[r.backend] || r.backend)} · ${r.latency_ms} мс</span>
     </div>
     <div class="lumina-body">${mdToHtml(r.reply)}</div>
     <div class="lumina-footer">
@@ -522,7 +522,7 @@ const PIPELINE = [
   ["Анализ", "намерения, слоты, план"],
   ["Контекст", "персона + факты + история"],
   ["Инструменты", "реестр, таймауты, изоляция"],
-  ["Генерация", "LHC / Gemini / OpenAI-совместимый"],
+  ["Генерация", "LUMEN Core (свой ИИ) / Gemini / OpenAI-совместимый"],
 ];
 
 async function loadSystem() {
@@ -627,15 +627,23 @@ async function loadSettings() {
     $("#settings-grid").innerHTML = `
       <div class="set-card">
         <h3>Модуль генерации</h3>
-        <div class="set-row"><label>Модуль (backend.provider)</label>
+        <div class="set-row"><label>Основной ИИ (backend.provider)</label>
           <select id="s-provider">
-            <option value="heuristic" ${b.provider === "heuristic" ? "selected" : ""}>LHC — локальный модуль (без сети)</option>
-            <option value="gemini" ${b.provider === "gemini" ? "selected" : ""}>Gemini (Google)</option>
-            <option value="openai" ${b.provider === "openai" ? "selected" : ""}>OpenAI-совместимый (Ollama, LM Studio…)</option>
-          </select></div>
+            <option value="lumen_core" ${["lumen_core","core","heuristic","lhc"].includes(b.provider) || !b.provider ? "selected" : ""}>LUMEN Core — собственный ИИ (офлайн, без ключей)</option>
+            <option value="gemini" ${b.provider === "gemini" ? "selected" : ""}>Внешний: Gemini (Google)</option>
+            <option value="openai" ${b.provider === "openai" ? "selected" : ""}>Внешний: OpenAI-совместимый (Ollama, LM Studio…)</option>
+          </select>
+          <span class="hint-inline">LUMEN Core — мозг платформы: знания, диалог, вычисления и инструменты живут локально. Внешние модули — опциональная надстройка.</span></div>
+        <div class="set-row"><label>Overflow-модуль (backend.overflow_provider)</label>
+          <select id="s-overflow">
+            <option value="" ${!b.overflow_provider ? "selected" : ""}>Выключен (только LUMEN Core)</option>
+            <option value="gemini" ${b.overflow_provider === "gemini" ? "selected" : ""}>Gemini — для свободного текста</option>
+            <option value="openai" ${b.overflow_provider === "openai" ? "selected" : ""}>OpenAI-совместимый — для свободного текста</option>
+          </select>
+          <span class="hint-inline">Гибридный режим: структурированные запросы обрабатывает LUMEN Core, свободный творческий текст — выбранный внешний модуль.</span></div>
         <div class="set-row"><label>Модель (backend.model)</label>
           <input id="s-model" value="${esc(b.model || "")}" placeholder="gemini-2.0-flash / llama3.2 / qwen2.5…"/>
-          <span class="hint-inline">Обязателен для сетевых модулей.</span></div>
+          <span class="hint-inline">Нужен только для внешних модулей.</span></div>
         <div class="set-row"><label>API-ключ (backend.api_key)</label>
           <input id="s-key" type="password" value="${esc(b.api_key || "")}" placeholder="••••"/>
           <span class="hint-inline">Для Gemini — ключ Google AI Studio. Для Ollama — пусто.</span></div>
@@ -714,7 +722,8 @@ async function saveSettings() {
   const chk = id => $(id)?.checked;
   const payload = {
     backend: {
-      provider: val("#s-provider"), model: val("#s-model") || "",
+      provider: val("#s-provider"), overflow_provider: val("#s-overflow") || "",
+      model: val("#s-model") || "",
       api_key: val("#s-key") || "", base_url: val("#s-url") || "",
       temperature: parseFloat(val("#s-temp") || "0.7"),
     },

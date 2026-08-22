@@ -28,7 +28,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from .. import BRAND_NAME, MODEL_NAME, VERSION, TAGLINE
 from ..config import LumenConfig, BASE_DIR, DATA_DIR
-from ..kernel.backends import get_backend, HeuristicBackend
+from ..kernel.backends import get_backend, LumenCoreBackend
 from ..kernel.engine import LumenEngine, create_engine
 from ..io.voice import VoiceModule
 
@@ -183,16 +183,19 @@ class LumenServer:
             "model": MODEL_NAME,
             "version": VERSION,
             "tagline": TAGLINE,
-            "concept": "Самостоятельная ИИ-платформа: собственное ядро LUMEN-1 "
-                       "(конвейер «Луч»: приём → защита → анализ → контекст → "
-                       "инструменты → генерация), модуль контекстной памяти, "
-                       "реестр инструментов и обучающая петля.",
+            "concept": "Самостоятельная ИИ-платформа: основной разум — LUMEN Core, "
+                       "собственный локальный ИИ-модуль (встроенная база знаний, "
+                       "диалоговая память, планирование, инструменты) — офлайн, "
+                       "без облака. Конвейер «Луч»: приём → защита → анализ → "
+                       "контекст → инструменты → генерация. Внешние LLM-модули "
+                       "(Gemini, OpenAI-совместимые) — опциональная надстройка.",
             "stages": ["Приём", "Защита", "Анализ", "Контекст", "Инструменты",
                        "Генерация"],
             "memory_layers": ["working (сессия)", "episodic (журналы)",
                               "semantic (факты)"],
-            "backends": ["LHC — локальный модуль рассуждения",
-                         "Gemini (REST)", "OpenAI-совместимый (Ollama, LM Studio…)"],
+            "backends": ["LUMEN Core — собственный ИИ (офлайн, основной)",
+                         "Gemini (REST) — внешний модуль",
+                         "OpenAI-совместимый (Ollama, LM Studio…) — внешний модуль"],
             "learning": ["фидбэк (+/−)", "адаптация предпочтений",
                          "экспорт корпуса для дообучения"],
         }
@@ -225,7 +228,7 @@ class LumenServer:
                 max_input_length=int(self.config.get("safety.max_input_length", 8000)),
                 block_injection=bool(self.config.get("safety.block_injection", True)))
             self.engine.backend = get_backend(self.config)
-            if isinstance(self.engine.backend, HeuristicBackend):
+            if isinstance(self.engine.backend, LumenCoreBackend):
                 self.engine._lhc = self.engine.backend
             self.engine.weaver = type(self.engine.weaver)(self.config, self.engine.memory)
         except Exception:

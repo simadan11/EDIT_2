@@ -344,7 +344,7 @@ class TestConfig(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="lumen_cfg_"))
         from lumen.config import LumenConfig
         cfg = LumenConfig(path=tmp / "lumen.json")
-        self.assertEqual(cfg.get("backend.provider"), "heuristic")
+        self.assertEqual(cfg.get("backend.provider"), "lumen_core")
         cfg.set("persona.style", "brief")
         cfg2 = LumenConfig(path=tmp / "lumen.json")
         self.assertEqual(cfg2.get("persona.style"), "brief")
@@ -364,7 +364,7 @@ class TestConfig(unittest.TestCase):
         cfg.update({"backend": {"temperature": 0.2}, "persona": {"name": "X"}})
         self.assertEqual(cfg.get("backend.temperature"), 0.2)
         self.assertEqual(cfg.get("persona.name"), "X")
-        self.assertEqual(cfg.get("backend.provider"), "heuristic")  # не потеряно
+        self.assertEqual(cfg.get("backend.provider"), "lumen_core")  # не потеряно
 
 
 class TestServer(unittest.TestCase):

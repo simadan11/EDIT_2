@@ -1,23 +1,29 @@
 """
 LUMEN — генеративные модули (backends).
 
-Три реализуются модуля, подключаемых к стадии 6 конвейера:
+Основной генеративный модуль платформы — LUMEN Core: собственный
+локальный ИИ (lumen/kernel/brain.py + lumen/knowledge) — офлайн,
+без ключей, всегда доступен. Он и есть «мозг» платформы.
 
-  LHC (LUMEN Heuristic Core)  — встроенный модуль локального рассуждения.
-      Собирает ответ из плана, результатов инструментов и памяти без сети
-      и ключей. Всегда доступен — это деградационный «пол» платформы.
+Внешние генеративные модули — опциональные надстройки:
+
   Gemini                      — Google Gemini через официальный REST API.
   OpenAI-совместимый          — любой сервер с /chat/completions
       (Ollama, LM Studio, Jan, llama.cpp, vLLM…).
 
-Выбор — по конфигурации backend.provider. Любой сетевой сбой на лету
-переключает генерацию на LHC с пометкой fallback (см. generator.py).
+Гибридный режим (overflow): если в настройках задан
+`backend.overflow_provider`, LUMEN Core обрабатывает все структурированные
+запросы (знания, вычисления, инструменты, диалог), а свободный
+творческий текст — за которым ядро честно признаёт, что «без внешнего
+модуля не закрыться» — отдаёт подключённому внешнему модулю.
+
+ЛЮБОЙ сетевой сбой переключает генерацию на LUMEN Core
+(см. engine.py) — деградация всегда вниз, к собственному модулю.
 """
 
 from __future__ import annotations
 
 import json
-import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -41,48 +47,28 @@ class Backend:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# LHC — встроенный модуль локального рассуждения
+# LUMEN Core — собственный ИИ-модуль (ОСНОВНОЙ)
 # ═══════════════════════════════════════════════════════════════════════════
 
-class HeuristicBackend(Backend):
-    """LHC: детерминированный генератор по плану и результатам инструментов."""
+class LumenCoreBackend(Backend):
+    """Основной генеративный модуль: собственный ИИ LUMEN Core.
 
-    name = "lhc"
-    display = "LUMEN LHC (локальный модуль)"
+    Вся логика рассуждения — в lumen.kernel.brain.LumenCore:
+    база знаний, диалоговое состояние, календарная математика,
+    текстовая статистика, честный фолбэк. Сеть не нужна.
+    """
 
-    def __init__(self, persona: Optional[Dict[str, str]] = None) -> None:
+    name = "lumen_core"
+    display = "LUMEN Core — собственный ИИ (офлайн)"
+
+    def __init__(self, persona: Optional[Dict[str, str]] = None,
+                 overflow: Optional["Backend"] = None) -> None:
         self.persona = persona or {"name": "LUMEN", "style": "balanced"}
-        self._greet_idx = 0
-        self._thanks_idx = 0
-        self._fallback_idx = 0
+        # опциональный внешний модуль для свободного текста (overflow)
+        self.overflow = overflow
 
     def available(self) -> (bool, str):
-        return True, "встроенный"
-
-    # ── шаблоны (RU-first) ───────────────────────────────────────────────────
-    _GREETINGS = [
-        "Здравствуйте! Я LUMEN. Чем освещу путь? Спросите о времени, погоде, "
-        "состоянии системы — или просто расскажите, что у вас нового.",
-        "Привет! LUMEN на связи. Конвейер «Луч» разогрет, инструменты на месте. "
-        "С чего начнём?",
-        "Добрый день! Готов работать: анализ, инструменты, память — всё под рукой.",
-    ]
-    _THANKS = [
-        "Всегда рад. Если какой-то ответ пришёлся — поставьте «+» под ним: "
-        "обучающая петля LUMEN учится по вашим оценкам.",
-        "Пожалуйста! Обращайтесь — я помню контекст сессии.",
-    ]
-    _FALLBACKS = [
-        "Я обработал запрос, но у меня нет точного инструмента, который "
-        "ответил бы на него полностью. Могу предложить: спросить о времени, "
-        "погоде, состоянии системы; вычислить выражение; поискать файлы в "
-        "проекте; что-то запомнить или вспомнить. Переформулируйте — попробую снова.",
-        "Спросите меня иначе: мне проще, когда задача конкретна. Подсказка: "
-        "время, погода, калькулятор, системный мониторинг, файлы, память — "
-        "мои рабочие инструменты.",
-        "Этот запрос вышел за рамки моих текущих инструментов. Скажите, чего "
-        "вы ожидаете в ответе — я подберу путь или честно скажу, чего не хватает.",
-    ]
+        return True, "собственный модуль, офлайн"
 
     def generate(self, system: str, messages: List[Dict[str, str]],
                  temperature: float = 0.7, max_tokens: int = 1024,
@@ -90,130 +76,58 @@ class HeuristicBackend(Backend):
                  tool_results: Optional[List[Dict[str, Any]]] = None,
                  facts: Optional[List[str]] = None,
                  risk: str = "safe", **kwargs) -> str:
+        from .brain import get_core  # локальный импорт: ядро подтягивает KB
+
+        core = get_core(
+            language=(self.persona or {}).get("language", "ru"),
+            persona_name=(self.persona or {}).get("name", "LUMEN"))
         plan = plan or {}
-        primary = plan.get("primary", "chat")
-        slots = plan.get("slots", {})
-        tool_results = tool_results or []
-        facts = facts or []
+        # текущий текст запроса: явно от конвейера (без префиксов контекста),
+        # иначе — последняя user-реплика в messages
+        text = str(kwargs.get("text") or "") or _last_user_text(messages)
 
-        def _first_tool_result(name: str) -> Optional[Dict[str, Any]]:
-            for tr in tool_results:
-                if tr.get("name") == name:
-                    return tr
-            return None
+        answer, needs_ext = core.quick_answer(
+            text, context=facts,
+            plan=plan, tool_results=tool_results or [], risk=risk)
 
-        # ── блоки: вежливость к риску ─────────────────────────────────────────
-        if risk == "blocked":
-            return (
-                "Этот запрос заблокирован защитным слоем LUMEN: в нём есть "
-                "признаки попытки переопределить правила ядра. Я так не работаю. "
-                "Если вопрос был искренним — сформулируйте его без инструкций "
-                "типа «проигнорируй правила»."
-            )
+        # ── overflow: свободный текст → внешний модуль (если подключён) ────
+        if needs_ext and self.overflow is not None:
+            try:
+                ok, reason = self.overflow.available()
+                if ok:
+                    ext = self.overflow.generate(
+                        system, messages, temperature=temperature,
+                        max_tokens=max_tokens)
+                    if ext:
+                        return (f"_{ext.strip()}_\n"
+                                f"— свободный текст сгенерировал внешний "
+                                f"модуль «{self.overflow.display}»; "
+                                f"структурированные запросы — LUMEN Core.")
+            except Exception:  # noqa: BLE001 — деградация к ядру
+                answer += ("\n\n_Внешний модуль для свободного текста не "
+                           "ответил — ответ дал LUMEN Core._")
+        return answer
 
-        # ── по намерениям ─────────────────────────────────────────────────────
-        if primary == "identity":
-            return (
-                "Я — LUMEN (Люмен), самостоятельная ИИ-платформа. "
-                "Внутри работает собственное ядро LUMEN-1: шестистадийный "
-                "конвейер «Луч» — приём, защита, анализ, контекст, инструменты, "
-                "генерация — плюс модуль памяти и обучающая петля. "
-                "Я не переименование и не копия прежних ассистентов: у меня "
-                "своя архитектура, свой интерфейс и свой голос. "
-                f"Ядро: {tool_results and 'разогрет' or 'готов к работе'}."
-            )
 
-        if primary == "capability":
-            tr = _first_tool_result("knowledge.capabilities")
-            if tr and tr.get("ok") and tr.get("text"):
-                return tr["text"]
-            return ("Мои возможности: анализ запросов и контекст, память "
-                    "(семантические факты, сессии), инструменты — время, "
-                    "калькулятор, погода, состояние системы, поиск файлов, "
-                    "веб-поиск через legacy-мост, генерация текста выбранным "
-                    "модулем. Полный список — в разделе «Инструменты».")
+# ── устаревшее имя (совместимость с конфигами и импортами) ─────────────────
+class HeuristicBackend(LumenCoreBackend):
+    """LHC — историческое имя LUMEN Core. Полностью совместимо."""
 
-        if primary == "math":
-            tr = _first_tool_result("math.calc")
-            if tr and tr.get("ok"):
-                return f"{slots.get('expression', 'Выражение')}  {tr['text']}."
-            return "Не удалось вычислить. Пришлите выражение цифрами: например, «вычисли 12 × 8 + 4»."
+    name = "lhc"
+    display = "LUMEN Core (LHC, локальный режим)"
 
-        if primary == "weather":
-            tr = _first_tool_result("weather.current")
-            if tr and tr.get("ok") and tr.get("text"):
-                return tr["text"]
-            reason = (tr or {}).get("error", "инструмент не запускался")
-            return f"Погоду получить не удалось ({reason}). Проверьте сеть и повторите."
 
-        if primary == "system_status":
-            tr = _first_tool_result("system.status")
-            if tr and tr.get("ok") and tr.get("text"):
-                return tr["text"]
-            return "Системный мониторинг не ответил: " + (tr or {}).get("error", "неизвестно")
-
-        if primary == "time":
-            tr = _first_tool_result("time.now")
-            if tr and tr.get("ok") and tr.get("text"):
-                return tr["text"]
-            return "Модуль времени не ответил — попробуйте ещё раз."
-
-        if primary == "file_search":
-            tr = _first_tool_result("files.search")
-            if tr and tr.get("ok"):
-                return tr.get("text") or "Поиск завершён."
-            return "Поиск файлов не удался: " + (tr or {}).get("error", "неизвестно")
-
-        if primary == "memory_save":
-            tr = _first_tool_result("memory.store")
-            if tr and tr.get("ok"):
-                key = (tr.get("data") or {}).get("key", "")
-                return (f"Запомнил: {key} — в семантическом слое памяти. "
-                        "Ссылаться на него буду в следующих сессиях.")
-            return "Не удалось сохранить в память: " + (tr or {}).get("error", "неизвестно")
-
-        if primary == "memory_recall":
-            tr = _first_tool_result("memory.recall")
-            if tr and tr.get("ok") and tr.get("text"):
-                header = "Вот что я помню:\n" if tr.get("count") else ""
-                return header + tr["text"]
-            return "В долговременной памяти по этому запросу пока пусто. " \
-                   "Скажите «запомни, что …» — и я сохраню факт."
-
-        if primary == "greeting":
-            g = self._GREETINGS[self._greet_idx % len(self._GREETINGS)]
-            self._greet_idx += 1
-            if facts:
-                g += "\n\nКстати, из контекста: " + " ".join(facts[:2])
-            return g
-
-        if primary == "thanks":
-            t = self._THANKS[self._thanks_idx % len(self._THANKS)]
-            self._thanks_idx += 1
-            return t
-
-        if primary == "farewell":
-            return "До связи. Контекст сессии сохранён — вернётесь, продолжим с того же места."
-
-        if primary == "web_info":
-            tr = _first_tool_result("legacy.web_search")
-            if tr and tr.get("ok") and tr.get("text"):
-                return "Нашёл в сети:\n" + tr["text"]
-            reason = (tr or {}).get("error", "веб-поиск недоступен на этой машине")
-            return f"Веб-поиск не доступен ({reason}). Могу помочь с остальным."
-
-        # ── chat: честный ответ с опорой на факты ─────────────────────────────
-        fb = self._FALLBACKS[self._fallback_idx % len(self._FALLBACKS)]
-        self._fallback_idx += 1
-        parts = []
-        if facts:
-            parts.append("Из контекста: " + " ".join(facts[:3]))
-        parts.append(fb)
-        return "\n\n".join(parts)
+def _last_user_text(messages: List[Dict[str, str]]) -> str:
+    for m in reversed(messages or []):
+        if m.get("role") == "user" and m.get("content"):
+            return m["content"]
+    if messages:
+        return messages[-1].get("content", "") or ""
+    return ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Сетевые бэкенды (stdlib urllib, без зависимостей)
+# Сетевые бэкенды — опциональные внешние модули (stdlib urllib)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _http_post_json(url: str, payload: Dict[str, Any],
@@ -231,7 +145,7 @@ class OpenAIBackend(Backend):
     """Любой OpenAI-совместимый сервер (Ollama, LM Studio, Jan, vLLM…)."""
 
     name = "openai"
-    display = "OpenAI-совместимый модуль"
+    display = "Внешний модуль: OpenAI-совместимый"
 
     def __init__(self, base_url: str = "http://localhost:11434/v1",
                  api_key: str = "", model: str = "") -> None:
@@ -273,10 +187,10 @@ class OpenAIBackend(Backend):
 
 
 class GeminiBackend(Backend):
-    """Google Gemini (generativelanguage.googleapis.com)."""
+    """Google Gemini (generativelanguage.googleapis.com) — внешний модуль."""
 
     name = "gemini"
-    display = "Модуль Gemini"
+    display = "Внешний модуль: Gemini (Google)"
 
     def __init__(self, api_key: str = "", model: str = "") -> None:
         self.api_key = api_key
@@ -316,7 +230,10 @@ class GeminiBackend(Backend):
 # ═══════════════════════════════════════════════════════════════════════════
 
 BACKENDS = {
-    "heuristic": HeuristicBackend,
+    "lumen_core": LumenCoreBackend,
+    "core": LumenCoreBackend,
+    "own": LumenCoreBackend,
+    "heuristic": HeuristicBackend,   # устаревшее имя — тот же LUMEN Core
     "lhc": HeuristicBackend,
     "openai": OpenAIBackend,
     "ollama": OpenAIBackend,
@@ -324,24 +241,67 @@ BACKENDS = {
     "gemini": GeminiBackend,
 }
 
+_CORE_NAMES = {"lumen_core", "core", "own", "heuristic", "lhc"}
+
+
+def _build_network_backend(config, ext: str) -> Optional[Backend]:
+    """Собирает внешний модуль (для overflow или legacy-режима)."""
+    if ext == "gemini":
+        key = str(config.get("backend.api_key", "") or "")
+        if not key:
+            return None
+        return GeminiBackend(api_key=key,
+                             model=config.get("backend.model", "") or "gemini-2.0-flash")
+    if ext in ("openai", "ollama", "lmstudio"):
+        return OpenAIBackend(
+            base_url=config.get("backend.base_url", "http://localhost:11434/v1"),
+            api_key=str(config.get("backend.api_key", "") or ""),
+            model=config.get("backend.model", "") or "llama3.2",
+        )
+    return None
+
 
 def get_backend(config) -> Backend:
-    """Создаёт активный бэкенд по конфигурации LUMEN."""
-    provider = str(config.get("backend.provider", "heuristic")).lower()
-    cls = BACKENDS.get(provider, HeuristicBackend)
-    if cls in (OpenAIBackend,):
+    """Создаёт активный генеративный модуль по конфигурации LUMEN.
+
+    По умолчанию — LUMEN Core (собственный ИИ). Внешний модуль
+    подключается либо как основной (legacy: provider=gemini/openai),
+    либо как опциональный overflow для свободного текста.
+    """
+    provider = str(config.get("backend.provider", "lumen_core")).lower()
+
+    # ── основной режим: LUMEN Core (собственный) ───────────────────────────
+    if provider in _CORE_NAMES:
+        persona = {
+            "name": config.get("persona.name", "LUMEN"),
+            "style": config.get("persona.style", "balanced"),
+            "language": config.get("language", "ru"),
+        }
+        if provider in ("heuristic", "lhc"):
+            backend: Backend = HeuristicBackend(persona=persona)
+        else:
+            backend = LumenCoreBackend(persona=persona)
+        # опциональный внешний overflow
+        ext = str(config.get("backend.overflow_provider", "") or "").lower()
+        if ext and ext not in _CORE_NAMES:
+            net = _build_network_backend(config, ext)
+            if net is not None:
+                backend.overflow = net
+        return backend
+
+    # ── legacy-режим: сетевой модуль как основной (деградация — к Core) ───
+    cls = BACKENDS.get(provider)
+    if cls is None:
+        return LumenCoreBackend(persona={"name": "LUMEN", "style": "balanced"})
+    if cls is OpenAIBackend:
         return cls(
             base_url=config.get("backend.base_url", "http://localhost:11434/v1"),
-            api_key=config.get("backend.api_key", ""),
+            api_key=str(config.get("backend.api_key", "") or ""),
             model=config.get("backend.model", "") or "llama3.2",
         )
     if cls is GeminiBackend:
         return cls(
-            api_key=config.get("backend.api_key", ""),
+            api_key=str(config.get("backend.api_key", "") or ""),
             model=config.get("backend.model", "") or "gemini-2.0-flash",
         )
-    persona = {
-        "name": config.get("persona.name", "LUMEN"),
-        "style": config.get("persona.style", "balanced"),
-    }
-    return cls(persona=persona)
+    return cls()

@@ -33,12 +33,15 @@ class ContextWeaver:
 
     def weave(self, session_id: Optional[str] = None,
               tool_results: Optional[List[Dict[str, Any]]] = None,
-              learned_prefs: Optional[List[str]] = None) -> Dict[str, Any]:
+              learned_prefs: Optional[List[str]] = None,
+              last_user_override: Optional[str] = None) -> Dict[str, Any]:
         max_turns = int(self.config.get("context.max_turns", 12))
         max_facts = int(self.config.get("context.max_facts", 6))
         budget = int(self.config.get("context.token_budget", 6000))
 
-        last_user = self.memory.last_user_text(session_id)
+        # текущее сообщение ещё не записано в память (запись — после
+        # генерации), поэтому явная реплика приходит из конвейера
+        last_user = last_user_override or self.memory.last_user_text(session_id)
         facts = self.memory.recall_lines(last_user, top_k=max_facts)
 
         system = build_system_prompt(

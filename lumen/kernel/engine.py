@@ -8,7 +8,8 @@ LUMEN — ядро LUMEN-1 (LumenEngine).
     3. АНАЛИЗ     IntentPlanner.plan        — намерения, слоты, инструменты
     4. КОНТЕКСТ   ContextWeaver.weave       — персона + факты + история + результаты
     5. ИНСТРУМЕНТЫ ToolRegistry.run         — исполнение с таймаутами и изоляцией
-    6. ГЕНЕРАЦИЯ  Backend.generate          — LHC / Gemini / OpenAI-совместимый
+    6. ГЕНЕРАЦИЯ  Backend.generate          — LUMEN Core (основной, свой модуль)
+                                              / Gemini / OpenAI-совместимый (внешние)
     + ЗАПОМИНАНИЕ MemoryFabric              — сессия, авто-факты, эпизодический слой
 
 Две API-поверхности:
@@ -26,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from ..persona import build_system_prompt
-from .backends import get_backend, HeuristicBackend
+from .backends import get_backend, LumenCoreBackend
 from .context import ContextWeaver
 from .events import EventBus
 from .learning import LearningLoop
@@ -94,10 +95,13 @@ class LumenEngine:
         self.weaver = ContextWeaver(config, self.memory)
         self.registry = registry or ToolRegistry()
         self.backend = get_backend(config)
-        self._lhc = self.backend if isinstance(self.backend, HeuristicBackend) \
-            else HeuristicBackend(persona={
+        # деградационный пол — всегда LUMEN Core (собственный модуль)
+        self._lhc = self.backend if isinstance(self.backend, LumenCoreBackend) \
+            else LumenCoreBackend(persona={
                 "name": config.get("persona.name", "LUMEN"),
                 "style": config.get("persona.style", "balanced")})
+        # последние планы сессий — для анафоры («а в Киеве?»)
+        self._last_plans: Dict[str, Any] = {}
 
     # ── публичное API ────────────────────────────────────────────────────────
     def process(self, message: str, session_id: Optional[str] = None,
@@ -138,21 +142,24 @@ class LumenEngine:
             self._finalize(response, t0, emit)
             return EngineResponse(**response)
 
-        # ── 3. анализ ─────────────────────────────────────────────────────────
-        plan = self.planner.plan(intake.text)
+        # ── 3. анализ (с анафорой: учитываем план предыдущего запроса) ───────
+        plan = self.planner.plan(intake.text, last=self._last_plans.get(sid))
+        self._last_plans[sid] = plan
         response["intent"] = plan.primary
         response["intents"] = plan.intents
         response["confidence"] = plan.confidence
         emit("plan", **plan.to_dict())
 
         # ── 4a. контекст (первый проход: без инструментов) ────────────────────
-        ctx = self.weaver.weave(session_id=sid, learned_prefs=self.learning.learned_preferences())
+        ctx = self.weaver.weave(session_id=sid,
+                                learned_prefs=self.learning.learned_preferences(),
+                                last_user_override=intake.text)
 
         # ── 5. инструменты ────────────────────────────────────────────────────
         tool_results: List[Dict[str, Any]] = []
         # capability-инструмент подмешиваем для identity/capability
         if plan.primary in ("identity", "capability") and plan.primary == "capability":
-            pass  # LHC сам ответит; инструмент не обязателен
+            pass  # LUMEN Core сам ответит; инструмент не обязателен
         for call in plan.tool_calls:
             if self.registry.get(call.name) is None:
                 tool_results.append({"name": call.name, "ok": False,
@@ -170,22 +177,30 @@ class LumenEngine:
 
         # ── 4b. контекст (финальный: с результатами инструментов) ────────────
         ctx = self.weaver.weave(session_id=sid, tool_results=tool_results,
-                                learned_prefs=self.learning.learned_preferences())
+                                learned_prefs=self.learning.learned_preferences(),
+                                last_user_override=intake.text)
         response["facts_used"] = ctx["facts"]
         emit("context", facts=len(ctx["facts"]),
              history=len(ctx["messages"]), tokens=ctx["token_estimate"])
 
         # ── 6. генерация ──────────────────────────────────────────────────────
+        # Основной модуль — LUMEN Core (собственный ИИ). Сетевой модуль
+        # (если выбран как provider) — опциональная надстройка; любой сбой
+        # переключает генерацию на LUMEN Core.
         messages = self.weaver.final_messages(ctx)
         fallback = False
         if plan.primary == "blocked" or intake.risk == "blocked":
             reply = self._blocked_reply(intake)
         else:
             try:
-                if isinstance(self.backend, HeuristicBackend):
+                if isinstance(self.backend, LumenCoreBackend):
+                    # LUMEN Core (собственный модуль) — всегда получает
+                    # план, результаты инструментов и факты; исходный текст
+                    # — без префиксов контекста (план уже построен от него)
                     reply = self.backend.generate(
                         ctx["system"], messages,
                         temperature=float(self.config.get("backend.temperature", 0.7)),
+                        text=intake.text,
                         plan=plan.to_dict(), tool_results=tool_results,
                         facts=ctx["facts"], risk=intake.risk)
                 else:
@@ -198,15 +213,17 @@ class LumenEngine:
                         max_tokens=int(self.config.get("backend.max_tokens", 1024)))
                     if not reply:
                         raise RuntimeError("бэкенд вернул пустой ответ")
-            except Exception as e:  # noqa: BLE001 — деградация на LHC
+            except Exception as e:  # noqa: BLE001 — деградация на LUMEN Core
                 fallback = True
                 response["fallback"] = True
                 reply = self._lhc.generate(
                     ctx["system"], messages,
                     temperature=float(self.config.get("backend.temperature", 0.7)),
+                    text=intake.text,
                     plan=plan.to_dict(), tool_results=tool_results,
                     facts=ctx["facts"], risk=intake.risk)
-                reply += f"\n\n_Сетевой модуль не ответил ({e}); ответ дал локальный модуль LHC._"
+                reply += (f"\n\n_Сетевой модуль не ответил ({e}); "
+                          "ответ дал LUMEN Core — собственный модуль._")
 
         # ── запоминание ───────────────────────────────────────────────────────
         harvested = self.memory.harvest(intake.text)

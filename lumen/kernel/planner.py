@@ -9,7 +9,12 @@ LUMEN — анализ намерений (IntentPlanner).
 Намерения (primary + secondary):
   identity, capability, greeting, farewell, thanks,
   time, math, weather, system_status, file_search,
-  memory_save, memory_recall, web_info, chat
+  memory_save, memory_recall, web_info,
+  date_math (календарная математика), text_ops (статистика текста),
+  joke, riddle, knowledge (встроенная база знаний LUMEN Core),
+  chat
+Плюс анафора: короткое продолжение («а в Киеве?») наследует
+последнее намерение сессии (plan(text, last=...)).
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ _INTENTS: List[Dict[str, Any]] = [
     ]},
     {"name": "system_status", "weight": 0.9, "patterns": [
         r"состояние\s+(системы|компьютера|машины)", r"ресурсы\s+системы",
+        r"как\s+(там\s+|дела\s+у\s+)?(система|компьютер|машина)\b", r"как\s+у\s+(системы|компьютера|машины)",
         r"(cpu|ram|gpu|оперативн|нагрузк)\s*(загрузк|использован|\b)",
         r"как\s+(компьютер|система|машина)\b", r"system\s+status", r"cpu\s+usage",
         r"сколько\s+(ram|памяти)\s+свободно",
@@ -56,6 +62,41 @@ _INTENTS: List[Dict[str, Any]] = [
     {"name": "web_info", "weight": 0.7, "patterns": [
         r"поищи\s+в\s+интернете", r"найди\s+(информацию|новости)\s+в\s+сети",
         r"веб-поиск", r"вебпоиск", r"search\s+the\s+web", r"news\s+today",
+    ]},
+    {"name": "date_math", "weight": 0.9, "patterns": [
+        r"сколько\s+(дн\w+|нед\w+|месяц\w+|лет\w*)\s+до\s",
+        r"(дн\w+|месяц\w+)\s+осталось\s+до",
+        r"какое\s+число\s+будет\s+через",
+        r"что\s+будет\s+через\s+\d+\s*(дн|нед|мес|год)",
+        r"days\s+until", r"how\s+many\s+days",
+    ]},
+    {"name": "text_ops", "weight": 0.82, "patterns": [
+        r"сколько\s+(в\s+)?(этом\s+)?(тексте|предложении|словах)",
+        r"сколько\s+(слов|знаков|букв|символов)\b",
+        r"подсчитай\s+(слова|знаки|буквы|символы)",
+        r"посчитай\s+(слова|знаки|буквы|символы)",
+        r"word\s+count", r"count\s+(the\s+)?words",
+    ]},
+    {"name": "joke", "weight": 0.85, "patterns": [
+        r"расскажи\s+(мне\s+)?(шутк|анекдот)", r"\bшутк\w*",
+        r"что-нибудь\s+смешн", r"(смешн\w+|анекдот)\s+(расскажи|придумай)",
+        r"придумай\s+шутк",
+        r"\bjoke\b", r"make\s+me\s+laugh", r"tell\s+me\s+a\s+joke",
+    ]},
+    {"name": "riddle", "weight": 0.85, "patterns": [
+        r"загадк\w*", r"загадай\s+(мне\s+)?", r"\briddle\b",
+    ]},
+    {"name": "knowledge", "weight": 0.62, "patterns": [
+        r"кто\s+(такой|такая|был|была)\s+[a-zа-яё]{2,}",
+        r"что\s+такое\s+\S", r"расскажи\s+(мне\s+)?(о|про)\s+\S",
+        r"как\s+(ты\s+|устроен\w*\s+)?(работает|работаешь)\s",
+        r"как\s+устроен\w*\s+\w+",
+        r"сколько\s+(секунд|минут|часов|дней|месяцев|лет|раундов)\s+в\s+",
+        r"какая\s+(самая\s+)?(высокая|большая|длинная|быстрая|древняя|столица|страна|река|гора)",
+        r"где\s+(находится|расположен\w*)\s",
+        r"почему\s+(небо|снег|солнце|луна|закат|восход|радуга|дождь)",
+        r"explain\s+", r"who\s+(was|is)\s+the",
+        r"what\s+is\s+the\s+(capital|area|population)", r"how\s+(far|old|many)\s",
     ]},
     {"name": "identity", "weight": 0.92, "patterns": [
         r"кто\s+ты\b", r"как\s+тебя\s+зовут", r"кто\s+тебя\s+создал", r"кто\s+твой\s+создатель",
@@ -87,6 +128,7 @@ _COMPILED: List[Dict[str, Any]] = [
 
 _PRIORITY = ["identity", "capability", "math", "weather", "system_status", "time",
             "file_search", "memory_save", "memory_recall", "web_info",
+            "date_math", "text_ops", "joke", "riddle", "knowledge",
             "thanks", "farewell", "greeting", "chat"]
 
 
@@ -178,7 +220,15 @@ def _extract_memory_save(text: str) -> Dict[str, str]:
 class IntentPlanner:
     """Классификация намерений + слоты + выбор инструментов."""
 
-    def plan(self, text: str) -> Plan:
+    _ANAPHORA_START = re.compile(
+        r"^(а|ну|тогда|просто|короче|а что|а как|и что|и как)\b", re.IGNORECASE)
+    _BARE_MATH = re.compile(r"[-+]?[0-9][0-9+\-*/^×÷.()\s]{0,39}")
+    _NOT_CITY = {"воздухе", "воде", "доме", "офисе", "городе", "стране",
+                 "мире", "интернете", "заливе", "лесу", "парке", "центре"}
+
+    def plan(self, text: str, last: Optional["Plan"] = None) -> Plan:
+        """Стадия 3. `last` — план предыдущего запроса сессии (для анафоры:
+        «а в Киеве?», «а 5×7?» наследуют предыдущее намерение)."""
         low = text.lower().strip()
         scored: List[str] = []
         for item in _COMPILED:
@@ -189,6 +239,11 @@ class IntentPlanner:
 
         # гарантируем порядок по приоритету
         intents = [i for i in _PRIORITY if i in scored]
+
+        # «напиши/сочини стихотворение о дожде» — творческий текст, не погода
+        if "weather" in intents and re.search(r"стихотворени|сочини|напиши", low):
+            intents = [i for i in intents if i != "weather"]
+
         primary = intents[0] if intents else "chat"
         confidence = 0.3
         if intents:
@@ -229,5 +284,54 @@ class IntentPlanner:
             tool_calls.append(ToolCall("legacy.web_search", {"query": text[:160]}))
 
         # capability/identity/time без инструментов — генератор сам справится
-        return Plan(primary=primary, intents=intents, slots=slots,
+        plan = Plan(primary=primary, intents=intents, slots=slots,
                     tool_calls=tool_calls, confidence=confidence)
+
+        # ── анафора: «а в Киеве?», «а 5*7?» — наследуем последнее намерение ─
+        plan = self._resolve_anaphora(text, plan, last)
+        return plan
+
+    def _resolve_anaphora(self, text: str, plan: Plan,
+                          last: Optional["Plan"]) -> Plan:
+        """Короткое продолжение диалога без собственного явного намерения
+        наследует намерение/слоты предыдущего запроса (с обновлёнными
+        слотами, если они есть: город, выражение)."""
+        if last is None or plan.primary != "chat":
+            return plan
+        inheritable = ("weather", "math", "time", "system_status", "date_math",
+                       "text_ops", "file_search")
+        if last.primary not in inheritable:
+            return plan
+        t = text.strip()
+        if len(t) > 60:
+            return plan
+        is_followup = bool(self._ANAPHORA_START.match(t)) or t.endswith("?")
+        if not (is_followup or self._BARE_MATH.fullmatch(t)):
+            return plan
+
+        city = _extract_city(text)
+        if not city:
+            # город в предложном падеже в конце: «а в киеве?»
+            m = re.search(r"\bв\s+([а-яё]{3,30})\??\s*$", t.lower())
+            if m and m.group(1) not in self._NOT_CITY:
+                city = m.group(1).capitalize()
+        expr = _extract_math(text)
+
+        if last.primary == "weather":
+            new_city = city or str((last.slots or {}).get("city") or "")
+            plan.primary, plan.intents = "weather", ["weather"]
+            plan.slots = {"city": new_city}
+            plan.tool_calls = [
+                ToolCall("weather.current", {"city": new_city} if new_city else {})]
+        elif expr:
+            # новое выражение — считаем, даже если раньше был другой вопрос
+            plan.primary, plan.intents = "math", ["math"]
+            plan.slots = {"expression": expr}
+            plan.tool_calls = [ToolCall("math.calc", {"expression": expr})]
+        else:
+            # повторение последнего намерения с теми же слотами/инструментами
+            plan.primary, plan.intents = last.primary, list(last.intents)
+            plan.slots = dict(last.slots or {})
+            plan.tool_calls = [ToolCall(c.name, dict(c.args)) for c in last.tool_calls]
+        plan.confidence = max(plan.confidence, 0.6)
+        return plan

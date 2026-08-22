@@ -123,6 +123,11 @@ Relevance-поиск по семантическому слою (с тезаур
   "persona": { "style": "brief" } }
 ```
 
+`backend.provider`: `lumen_core` (основной, по умолчанию) | `gemini` |
+`openai` (внешние модули); `lhc`/`heuristic` — совместимые алиасы
+`lumen_core`. `backend.overflow_provider`: `""` | `gemini` | `openai` —
+внешний модуль для свободного текста в гибридном режиме.
+
 Применяется к ядру сразу: guard, backend, context-сборщик пересоздаются
 без перезапуска сервера.
 

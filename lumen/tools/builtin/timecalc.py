@@ -68,7 +68,7 @@ def math_handler(expression: str) -> Dict[str, Any]:
                 "error": str(e)}
     if isinstance(value, float) and value.is_integer() and abs(value) < 1e15:
         value = int(value)
-    return {"text": f"≈ {value}", "result": value, "expression": expr}
+    return {"text": f"≈ {value}", "result": value, "expression": expr, "ok": True}
 
 
 def time_spec():
