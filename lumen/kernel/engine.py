@@ -8,8 +8,8 @@ LUMEN — ядро LUMEN-1 (LumenEngine).
     3. АНАЛИЗ     IntentPlanner.plan        — намерения, слоты, инструменты
     4. КОНТЕКСТ   ContextWeaver.weave       — персона + факты + история + результаты
     5. ИНСТРУМЕНТЫ ToolRegistry.run         — исполнение с таймаутами и изоляцией
-    6. ГЕНЕРАЦИЯ  Backend.generate          — LUMEN Core (основной, свой модуль)
-                                              / Gemini / OpenAI-совместимый (внешние)
+    6. ГЕНЕРАЦИЯ  Backend.generate          — LUMEN Core: единственный модуль,
+                                              собственный ИИ (офлайн, без API)
     + ЗАПОМИНАНИЕ MemoryFabric              — сессия, авто-факты, эпизодический слой
 
 Две API-поверхности:
@@ -184,36 +184,25 @@ class LumenEngine:
              history=len(ctx["messages"]), tokens=ctx["token_estimate"])
 
         # ── 6. генерация ──────────────────────────────────────────────────────
-        # Основной модуль — LUMEN Core (собственный ИИ). Сетевой модуль
-        # (если выбран как provider) — опциональная надстройка; любой сбой
-        # переключает генерацию на LUMEN Core.
+        # Единственный модуль — LUMEN Core (собственный ИИ, офлайн).
+        # Сеть и API-ключи не используются.
         messages = self.weaver.final_messages(ctx)
         fallback = False
         if plan.primary == "blocked" or intake.risk == "blocked":
             reply = self._blocked_reply(intake)
         else:
             try:
-                if isinstance(self.backend, LumenCoreBackend):
-                    # LUMEN Core (собственный модуль) — всегда получает
-                    # план, результаты инструментов и факты; исходный текст
-                    # — без префиксов контекста (план уже построен от него)
-                    reply = self.backend.generate(
-                        ctx["system"], messages,
-                        temperature=float(self.config.get("backend.temperature", 0.7)),
-                        text=intake.text,
-                        plan=plan.to_dict(), tool_results=tool_results,
-                        facts=ctx["facts"], risk=intake.risk)
-                else:
-                    ok, reason = self.backend.available()
-                    if not ok:
-                        raise RuntimeError(f"бэкенд недоступен: {reason}")
-                    reply = self.backend.generate(
-                        ctx["system"], messages,
-                        temperature=float(self.config.get("backend.temperature", 0.7)),
-                        max_tokens=int(self.config.get("backend.max_tokens", 1024)))
-                    if not reply:
-                        raise RuntimeError("бэкенд вернул пустой ответ")
-            except Exception as e:  # noqa: BLE001 — деградация на LUMEN Core
+                # LUMEN Core всегда получает план, результаты инструментов
+                # и факты; исходный текст — без префиксов контекста
+                reply = self.backend.generate(
+                    ctx["system"], messages,
+                    temperature=float(self.config.get("backend.temperature", 0.7)),
+                    text=intake.text,
+                    plan=plan.to_dict(), tool_results=tool_results,
+                    facts=ctx["facts"], risk=intake.risk)
+                if not reply:
+                    raise RuntimeError("модуль вернул пустой ответ")
+            except Exception as e:  # noqa: BLE001 — страховочный повтор
                 fallback = True
                 response["fallback"] = True
                 reply = self._lhc.generate(
@@ -222,8 +211,7 @@ class LumenEngine:
                     text=intake.text,
                     plan=plan.to_dict(), tool_results=tool_results,
                     facts=ctx["facts"], risk=intake.risk)
-                reply += (f"\n\n_Сетевой модуль не ответил ({e}); "
-                          "ответ дал LUMEN Core — собственный модуль._")
+                reply += f"\n\n_Была ошибка в обработке ({e}); ответ дал LUMEN Core._"
 
         # ── запоминание ───────────────────────────────────────────────────────
         harvested = self.memory.harvest(intake.text)

@@ -1,19 +1,21 @@
 """
-Model Router — единая точка доступа к генеративным модулям.
+Model Router — единая точка доступа к генерации текста.
 
-Порядок выбора (с 1.1):
-  1. LUMEN Core — собственный ИИ платформы (lumen/kernel/brain.py):
-     офлайн, без ключей, основной модуль по умолчанию.
-  2. Локальные модели (Ollama, LM Studio, Open WebUI) — если включён
-     use_local_claude (явный режим пользователя).
-  3. Google Gemini — внешний модуль: только если ядро LUMEN Core
-     сигнализирует, что запрос творческий и для него подключён
-     overflow-модуль (есть API-ключ), либо если модель указана явно.
+Принцип (с 1.1): **полностью своё ИИ** — по умолчанию единственный
+генеративный модуль LUMEN Core (lumen/kernel/brain.py): офлайн,
+без ключей, без внешних API. Автоматических внешних вызовов (Gemini
+и т.п.) здесь нет.
+
+Явные legacy-режимы пользователя сохраняются как есть:
+  • use_local_claude — локальный OpenAI-совместимый сервер;
+  • osint_mode — явный OSINT-режим;
+  • generate_text(..., model="...") — явная внешняя модель.
+Это выбор пользователя, а не поведение по умолчанию.
 
 Использование:
     from core.model_router import generate_text, chat_completion
 
-    text = generate_text("Напиши код на Python...")
+    text = generate_text("Сколько секунд в сутках?")
     # или
     resp = chat_completion([{"role": "user", "content": "..."}])
 """
@@ -84,11 +86,10 @@ def generate_text(prompt: str, model: Optional[str] = None, **kwargs) -> str:
     """
     Простая генерация текста.
 
-    По умолчанию — LUMEN Core (собственный ИИ платформы, офлайн).
-    Если ядро отвечает, что запрос творческий и внешний модуль
-    (Gemini) подключён — свободный текст уходит туда (overflow).
-    Явная модель (model=...) или use_local_claude — прямой проход
-    во внешний модуль. OSINT-режим — только внешний модуль.
+    По умолчанию — LUMEN Core (собственный ИИ платформы, офлайн, без
+    внешних API). Автоматических внешних вызовов нет. Явная модель
+    (model=...) или use_local_claude / OSINT-режим — явный выбор
+    пользователя, прямой проход в указанный модуль.
     """
     if is_osint_mode():
         prompt = _osint_prompt(prompt)
@@ -99,28 +100,19 @@ def generate_text(prompt: str, model: Optional[str] = None, **kwargs) -> str:
     if is_local_mode():
         return _generate_local(prompt, model, **kwargs)
 
-    # явная внешняя модель — без посредников
+    # явная внешняя модель — явный выбор пользователя
     if model:
         return _generate_gemini(prompt, model, **kwargs)
 
-    # основной модуль — LUMEN Core (свой ИИ)
+    # единственный модуль по умолчанию — LUMEN Core (свой ИИ)
     core = _lumen_core_answer(prompt)
     if core is not None:
-        answer, needs_ext = core
-        if not needs_ext:
-            return answer
-        if not _get_gemini_key():
-            return answer  # внешний модуль не подключён — честный ответ ядра
-        try:
-            ext = _generate_gemini(prompt, None, **kwargs)
-            if ext:
-                return ext
-        except Exception:
-            pass
+        answer, _ = core
         return answer
 
-    # ядро платформы недоступно — старый путь (внешний модуль)
-    return _generate_gemini(prompt, None, **kwargs)
+    # ядро платформы недоступно (нет пакета lumen/) — честно
+    return ("LUMEN Core (собственный ИИ платформы) недоступен: "
+            "установите/запустите платформу из корня репозитория.")
 
 
 def chat_completion(
@@ -148,7 +140,8 @@ def chat_completion(
     if model:
         return _chat_gemini(messages, model, temperature, max_tokens, **kwargs)
 
-    # LUMEN Core: последний пользовательский вопрос + контекст сессии
+    # единственный модуль по умолчанию — LUMEN Core:
+    # последний пользовательский вопрос + контекст сессии
     last_user = ""
     context: List[str] = []
     for m in messages:
@@ -158,20 +151,11 @@ def chat_completion(
             context.append(m.get("content", "")[:200])
     core = _lumen_core_answer(last_user, context=context[-3:] or None)
     if core is not None:
-        answer, needs_ext = core
-        if not needs_ext:
-            return answer
-        if not _get_gemini_key():
-            return answer
-        try:
-            ext = _chat_gemini(messages, None, temperature, max_tokens, **kwargs)
-            if ext:
-                return ext
-        except Exception:
-            pass
+        answer, _ = core
         return answer
 
-    return _chat_gemini(messages, None, temperature, max_tokens, **kwargs)
+    return ("LUMEN Core (собственный ИИ платформы) недоступен: "
+            "установите/запустите платформу из корня репозитория.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

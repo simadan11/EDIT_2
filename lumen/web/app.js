@@ -522,7 +522,7 @@ const PIPELINE = [
   ["Анализ", "намерения, слоты, план"],
   ["Контекст", "персона + факты + история"],
   ["Инструменты", "реестр, таймауты, изоляция"],
-  ["Генерация", "LUMEN Core (свой ИИ) / Gemini / OpenAI-совместимый"],
+  ["Генерация", "LUMEN Core — собственный ИИ (офлайн, без API)"],
 ];
 
 async function loadSystem() {
@@ -627,31 +627,17 @@ async function loadSettings() {
     $("#settings-grid").innerHTML = `
       <div class="set-card">
         <h3>Модуль генерации</h3>
-        <div class="set-row"><label>Основной ИИ (backend.provider)</label>
-          <select id="s-provider">
-            <option value="lumen_core" ${["lumen_core","core","heuristic","lhc"].includes(b.provider) || !b.provider ? "selected" : ""}>LUMEN Core — собственный ИИ (офлайн, без ключей)</option>
-            <option value="gemini" ${b.provider === "gemini" ? "selected" : ""}>Внешний: Gemini (Google)</option>
-            <option value="openai" ${b.provider === "openai" ? "selected" : ""}>Внешний: OpenAI-совместимый (Ollama, LM Studio…)</option>
-          </select>
-          <span class="hint-inline">LUMEN Core — мозг платформы: знания, диалог, вычисления и инструменты живут локально. Внешние модули — опциональная надстройка.</span></div>
-        <div class="set-row"><label>Overflow-модуль (backend.overflow_provider)</label>
-          <select id="s-overflow">
-            <option value="" ${!b.overflow_provider ? "selected" : ""}>Выключен (только LUMEN Core)</option>
-            <option value="gemini" ${b.overflow_provider === "gemini" ? "selected" : ""}>Gemini — для свободного текста</option>
-            <option value="openai" ${b.overflow_provider === "openai" ? "selected" : ""}>OpenAI-совместимый — для свободного текста</option>
-          </select>
-          <span class="hint-inline">Гибридный режим: структурированные запросы обрабатывает LUMEN Core, свободный творческий текст — выбранный внешний модуль.</span></div>
-        <div class="set-row"><label>Модель (backend.model)</label>
-          <input id="s-model" value="${esc(b.model || "")}" placeholder="gemini-2.0-flash / llama3.2 / qwen2.5…"/>
-          <span class="hint-inline">Нужен только для внешних модулей.</span></div>
-        <div class="set-row"><label>API-ключ (backend.api_key)</label>
-          <input id="s-key" type="password" value="${esc(b.api_key || "")}" placeholder="••••"/>
-          <span class="hint-inline">Для Gemini — ключ Google AI Studio. Для Ollama — пусто.</span></div>
-        <div class="set-row"><label>URL сервера (backend.base_url)</label>
-          <input id="s-url" value="${esc(b.base_url || "")}" placeholder="http://localhost:11434/v1"/></div>
-        <div class="set-row"><label>Температура — ${b.temperature ?? 0.7}</label>
-          <input id="s-temp" type="range" min="0" max="1.5" step="0.05"
-            value="${b.temperature ?? 0.7}"/></div>
+        <div class="set-row">
+          <label>ИИ платформы (backend.provider)</label>
+          <div class="core-badge" style="padding:10px 14px;border:1px solid var(--accent,#6ea8fe);border-radius:10px;background:rgba(110,168,254,.08)">
+            <b>LUMEN Core</b> — собственный ИИ
+            <div class="hint-inline" style="margin-top:4px">
+              Полностью офлайн: база знаний, диалог, вычисления и
+              инструменты. Без внешних API, без ключей, без сети
+              для генерации.
+            </div>
+          </div>
+        </div>
       </div>
       <div class="set-card">
         <h3>Персона</h3>
@@ -721,12 +707,7 @@ async function saveSettings() {
   const val = id => $(id)?.value;
   const chk = id => $(id)?.checked;
   const payload = {
-    backend: {
-      provider: val("#s-provider"), overflow_provider: val("#s-overflow") || "",
-      model: val("#s-model") || "",
-      api_key: val("#s-key") || "", base_url: val("#s-url") || "",
-      temperature: parseFloat(val("#s-temp") || "0.7"),
-    },
+    backend: { provider: "lumen_core" },
     persona: { name: val("#s-name") || "LUMEN", style: val("#s-style") },
     context: { max_turns: parseInt(val("#s-turns") || "12", 10),
                max_facts: parseInt(val("#s-facts") || "6", 10) },

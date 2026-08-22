@@ -27,7 +27,7 @@
   "confidence": 0.88,
   "tools_used": [{ "name": "time.now", "ok": true, "ms": 0, "error": null }],
   "facts_used": [],
-  "backend": "lhc",
+  "backend": "lumen_core",
   "fallback": false,
   "latency_ms": 2,
   "harvested": [],
@@ -61,7 +61,7 @@ event: remember
 data: {"stage": "remember", "harvested": 0, "session": "1d85beae02"}
 
 event: done
-data: {"stage": "done", "latency_ms": 2, "backend": "lhc", "fallback": false}
+data: {"stage": "done", "latency_ms": 2, "backend": "lumen_core", "fallback": false}
 
 event: result
 data: { …полный EngineResponse… }
@@ -119,14 +119,14 @@ Relevance-поиск по семантическому слою (с тезаур
 Частичное обновление, накладывается рекурсивно:
 
 ```json
-{ "backend": { "provider": "openai", "model": "llama3.2" },
+{ "backend": { "provider": "lumen_core" },
   "persona": { "style": "brief" } }
 ```
 
-`backend.provider`: `lumen_core` (основной, по умолчанию) | `gemini` |
-`openai` (внешние модули); `lhc`/`heuristic` — совместимые алиасы
-`lumen_core`. `backend.overflow_provider`: `""` | `gemini` | `openai` —
-внешний модуль для свободного текста в гибридном режиме.
+`backend.provider`: единственный реальный вариант — `lumen_core`
+(собственный ИИ, офлайн). Любое другое значение (включая старые
+`gemini`/`openai`/`lhc`/`heuristic`) приводит к LUMEN Core — внешних
+модулей в платформе нет, поле читается для совместимости.
 
 Применяется к ядру сразу: guard, backend, context-сборщик пересоздаются
 без перезапуска сервера.

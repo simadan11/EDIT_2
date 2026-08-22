@@ -2,7 +2,7 @@
 
 Покрытие: база знаний, календарная математика, текстовая статистика,
 шутки/загадки, анафора, составные запросы, бэкенд lumen_core как
-основной, signal overflow, legacy-роутер.
+единственный модуль (без внешних API), legacy-роутер.
 
 Запуск:  python -m unittest tests.test_lumen_core -v
 """
@@ -226,10 +226,10 @@ class TestLumenCoreBrain(unittest.TestCase):
         ans1, _ = self.core.quick_answer("Сколько слов в «привет»?")
         self.assertIn("1 слово", ans1)
 
-    def test_honest_fallback_and_overflow_signal(self):
+    def test_honest_fallback_flag(self):
         ans, needs = self.core.quick_answer("Напиши поэму о термодинамике и любви")
-        self.assertTrue(needs)  # ядро признаёт: нужен внешний модуль
-        self.assertTrue(ans)    # и всё равно отвечает честно
+        self.assertTrue(needs)  # запроса нет в ядре — честный фолбэк
+        self.assertTrue(ans)    # ответ всё равно дан
 
     def test_identity_mentions_own_core(self):
         ans, _ = self.core.quick_answer("Кто ты?")
@@ -262,12 +262,14 @@ class TestBackends(unittest.TestCase):
         b = get_backend(cfg)
         self.assertIsInstance(b, HeuristicBackend)
 
-    def test_gemini_backend_selected(self):
-        from lumen.kernel.backends import get_backend, GeminiBackend
-        cfg = type("C", (), {"get": staticmethod(
-            lambda k, d=None: {"backend.provider": "gemini",
-                               "backend.api_key": "k"}.get(k, d))})()
-        self.assertIsInstance(get_backend(cfg), GeminiBackend)
+    def test_no_external_backends(self):
+        """Внешних LLM-модулей нет: любой старый provider даёт LUMEN Core."""
+        from lumen.kernel.backends import get_backend, LumenCoreBackend
+        for provider in ("gemini", "openai", "ollama", "lmstudio", ""):
+            cfg = type("C", (), {"get": staticmethod(
+                lambda k, d=None: {"backend.provider": provider}.get(k, d))})()
+            self.assertIsInstance(get_backend(cfg), LumenCoreBackend,
+                                  f"provider={provider!r}")
 
     def test_core_generate_with_plan(self):
         from lumen.kernel.backends import get_backend, LumenCoreBackend
