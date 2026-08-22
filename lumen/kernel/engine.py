@@ -12,6 +12,12 @@ LUMEN — ядро LUMEN-1 (LumenEngine).
                                               собственный ИИ (офлайн, без API)
     + ЗАПОМИНАНИЕ MemoryFabric              — сессия, авто-факты, эпизодический слой
 
+На каждой стадии LUMEN ведёт «мысли» (thoughts) — честный трассирующий
+след рассуждений: что принял, какое намерение увидел, какие инструменты
+вызвал, какой контекст собрал, как сгенерировал. Мысли летят в события
+конвейера (stage "thought"), попадают в EngineResponse и в журнал
+lumen_data/thoughts.jsonl (UI показывает их в реальном времени).
+
 Две API-поверхности:
     engine.process(message)   → EngineResponse (единым пакетом)
     engine.stream(message)    → генератор событий (для SSE/UI)
@@ -19,6 +25,7 @@ LUMEN — ядро LUMEN-1 (LumenEngine).
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -26,6 +33,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
+from ..config import DATA_DIR
 from ..persona import build_system_prompt
 from .backends import get_backend, LumenCoreBackend
 from .context import ContextWeaver
@@ -54,6 +62,8 @@ class EngineResponse:
     latency_ms: int = 0
     harvested: List[Dict[str, Any]] = field(default_factory=list)
     blocked_reasons: List[str] = field(default_factory=list)
+    # «мысли» LUMEN: честный трассирующий след рассуждений по стадиям
+    thoughts: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -72,6 +82,7 @@ class EngineResponse:
             "latency_ms": self.latency_ms,
             "harvested": self.harvested,
             "blocked_reasons": self.blocked_reasons,
+            "thoughts": self.thoughts,
         }
 
 
@@ -102,6 +113,9 @@ class LumenEngine:
                 "style": config.get("persona.style", "balanced")})
         # последние планы сессий — для анафоры («а в Киеве?»)
         self._last_plans: Dict[str, Any] = {}
+        # журнал «мыслей» (lumen_data/thoughts.jsonl) — путь настраивается
+        # в тестах; по умолчанию — общий data-каталог платформы
+        self.thoughts_path = DATA_DIR / "thoughts.jsonl"
 
     # ── публичное API ────────────────────────────────────────────────────────
     def process(self, message: str, session_id: Optional[str] = None,
@@ -114,6 +128,7 @@ class LumenEngine:
             "confidence": 0.3, "tools_used": [], "facts_used": [],
             "backend": self.backend.name, "fallback": False,
             "harvested": [], "blocked_reasons": [], "reply": "",
+            "thoughts": [],
         }
         events: List[Dict[str, Any]] = []
 
@@ -127,6 +142,20 @@ class LumenEngine:
                 except Exception:
                     pass
 
+        def think(text: str) -> None:
+            """Записать «мысль» в трассу рассуждений и выпустить её в события."""
+            thought = {"stage": "thought", "text": text,
+                       "ts": round(time.time() - t0, 3)}
+            response["thoughts"].append(text)
+            events.append(thought)
+            self.events.publish("lumen.thought", **thought,
+                                message_id=response["message_id"])
+            if on_event is not None:
+                try:
+                    on_event(thought)
+                except Exception:
+                    pass
+
         # ── сессия ────────────────────────────────────────────────────────────
         sid = response["session_id"] or self.memory.new_session()
         response["session_id"] = sid
@@ -136,10 +165,12 @@ class LumenEngine:
         response["risk"] = intake.risk
         response["blocked_reasons"] = intake.reasons
         emit("intake", risk=intake.risk, tags=intake.tags)
+        think(f"Принял запрос ({len(intake.text)} зн.), уровень риска — {intake.risk}.")
         if not intake.ok:
             response["ok"] = False
             response["reply"] = self._blocked_reply(intake)
-            self._finalize(response, t0, emit)
+            think("Запрос не прошёл защитный слой — отвечаю стандартной отсылкой.")
+            self._finalize(response, t0, emit, intake.text)
             return EngineResponse(**response)
 
         # ── 3. анализ (с анафорой: учитываем план предыдущего запроса) ───────
@@ -149,6 +180,11 @@ class LumenEngine:
         response["intents"] = plan.intents
         response["confidence"] = plan.confidence
         emit("plan", **plan.to_dict())
+        slots = plan.to_dict().get("slots") or {}
+        think("Анализ: намерение "
+              + ", ".join(plan.intents)
+              + f" (уверенность {plan.confidence:.0%})"
+              + (f", слоты: {', '.join(slots)}" if slots else "") + ".")
 
         # ── 4a. контекст (первый проход: без инструментов) ────────────────────
         ctx = self.weaver.weave(session_id=sid,
@@ -165,7 +201,9 @@ class LumenEngine:
                 tool_results.append({"name": call.name, "ok": False,
                                      "error": "не зарегистрирован", "ms": 0, "text": ""})
                 emit("tool", name=call.name, ok=False, error="не зарегистрирован")
+                think(f"Инструмент {call.name} не зарегистрирован — обхожу без него.")
                 continue
+            think(f"Вызываю инструмент {call.name}.")
             res = self.registry.run(call.name, call.args)
             tr = {"name": call.name, "args": call.args, **res.to_dict()}
             tool_results.append(tr)
@@ -174,6 +212,7 @@ class LumenEngine:
                  "error": res.error or None})
             emit("tool", name=call.name, ok=res.ok, ms=res.ms,
                  text=(res.text or res.error or "")[:300])
+            think(f"Инструмент {call.name}: {'ок' if res.ok else 'ошибка'} за {res.ms} мс.")
 
         # ── 4b. контекст (финальный: с результатами инструментов) ────────────
         ctx = self.weaver.weave(session_id=sid, tool_results=tool_results,
@@ -182,6 +221,8 @@ class LumenEngine:
         response["facts_used"] = ctx["facts"]
         emit("context", facts=len(ctx["facts"]),
              history=len(ctx["messages"]), tokens=ctx["token_estimate"])
+        think(f"Собрал контекст: {len(ctx['facts'])} факт(ов) из памяти, "
+              f"{len(ctx['messages'])} реплик истории.")
 
         # ── 6. генерация ──────────────────────────────────────────────────────
         # Единственный модуль — LUMEN Core (собственный ИИ, офлайн).
@@ -189,8 +230,10 @@ class LumenEngine:
         messages = self.weaver.final_messages(ctx)
         fallback = False
         if plan.primary == "blocked" or intake.risk == "blocked":
+            think("Запрос заблокирован защитным слоем — не генерирую, отвечаю вежливо.")
             reply = self._blocked_reply(intake)
         else:
+            think("Генерирую ответ: LUMEN Core (офлайн, без внешних API).")
             try:
                 # LUMEN Core всегда получает план, результаты инструментов
                 # и факты; исходный текст — без префиксов контекста
@@ -205,6 +248,7 @@ class LumenEngine:
             except Exception as e:  # noqa: BLE001 — страховочный повтор
                 fallback = True
                 response["fallback"] = True
+                think(f"Основная генерация дала сбой ({e}) — деградирую на резервный проход.")
                 reply = self._lhc.generate(
                     ctx["system"], messages,
                     temperature=float(self.config.get("backend.temperature", 0.7)),
@@ -222,6 +266,10 @@ class LumenEngine:
                                    "intent": plan.primary,
                                    "last_user": intake.text[:300]})
         emit("remember", harvested=len(harvested), session=sid)
+        if harvested:
+            think(f"Запомнил новых фактов: {len(harvested)} — {', '.join(h['value'] for h in harvested[:3])}.")
+        else:
+            think("Сохраняю реплики в сессию.")
 
         # ── статистика обучения ───────────────────────────────────────────────
         self.learning.record_request(
@@ -230,7 +278,7 @@ class LumenEngine:
             fallback=fallback)
 
         response["reply"] = reply
-        self._finalize(response, t0, emit)
+        self._finalize(response, t0, emit, intake.text)
         return EngineResponse(**response)
 
     def stream(self, message: str,
@@ -280,10 +328,56 @@ class LumenEngine:
                     "Сформулируйте вопрос напрямую — я рад помочь.")
         return "Не удалось разобрать запрос. Попробуйте сформулировать его иначе."
 
-    def _finalize(self, response: Dict[str, Any], t0: float, emit) -> None:
+    def _finalize(self, response: Dict[str, Any], t0: float, emit,
+                  message_text: str = "") -> None:
         response["latency_ms"] = int((time.time() - t0) * 1000)
         emit("done", latency_ms=response["latency_ms"],
              backend=self.backend.name, fallback=response["fallback"])
+        self._journal_thoughts(response, message_text)
+
+    def _journal_thoughts(self, response: Dict[str, Any], message_text: str) -> None:
+        """Пишет след рассуждений в журнал мыслей (lumen_data/thoughts.jsonl)."""
+        path = getattr(self, "thoughts_path", None)
+        if not path:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            record = {
+                "ts": time.time(),
+                "iso": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "message_id": response.get("message_id", ""),
+                "session_id": response.get("session_id", ""),
+                "message": (message_text or "")[:300],
+                "intent": response.get("intent", ""),
+                "risk": response.get("risk", ""),
+                "thoughts": response.get("thoughts", []),
+                "reply": (response.get("reply") or "")[:300],
+                "latency_ms": response.get("latency_ms", 0),
+            }
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def thoughts(self, limit: int = 30) -> List[Dict[str, Any]]:
+        """Последние записи журнала мыслей (новые в конце)."""
+        path = getattr(self, "thoughts_path", None)
+        if not path or not path.exists():
+            return []
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return []
+        out: List[Dict[str, Any]] = []
+        for line in lines[-limit:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+        return out
 
 
 # ── фабрика «ядро + все части» ───────────────────────────────────────────────

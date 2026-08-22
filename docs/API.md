@@ -70,7 +70,9 @@ event: end
 data: {}
 ```
 
-Возможны также `event: error` с `data.error`.
+Возможны также `event: thought` — «мысли» LUMEN (с `data.text`),
+летят по мере обработки (живая панель «LUMEN думает» в UI), и
+`event: error` с `data.error`.
 
 ## Инструменты
 
@@ -147,9 +149,36 @@ CPU/RAM/диск/хост/аптайм + блок `platform` (бренд, мод
 Запросы, top намерений, top инструментов, фидбэк, уровень одобрения,
 выученные предпочтения.
 
-### `POST /api/learning/corpus`
-Экспорт JSONL-корпуса для дообучения (все сессии).
-Ответ: `{ "count": 142, "path": "…/lumen_data/export/corpus.jsonl" }`.
+### `GET /api/learning/auto`
+Статус фонового самообучения (цикл по умолчанию — каждые 60 с):
+
+```json
+{
+  "enabled": true,
+  "interval_sec": 60.0,
+  "runs": 12,
+  "last_run_iso": "2026-08-22 11:51:30",
+  "last_summary": { "new_facts": 1, "facts": ["identity/user_name = …"],
+                    "focus": "вычисления", "requests": 61 },
+  "last_error": ""
+}
+```
+
+### `GET /api/thoughts?limit=30`
+Журнал «мыслей» LUMEN (последние трассы рассуждений из
+`lumen_data/thoughts.jsonl`):
+
+```json
+{
+  "thoughts": [
+    { "iso": "2026-08-22 11:51:18", "intent": "math",
+      "message": "Вычисли 6 * 7",
+      "thoughts": ["Принял запрос…", "Анализ: намерение math…",
+                    "Генерирую ответ: LUMEN Core…"],
+      "reply": "6 × 7 = 42." }
+  ]
+}
+```
 
 ## Голос и прочее
 

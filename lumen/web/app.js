@@ -36,6 +36,8 @@ const state = {
   busy: false,
   memory: { category: null, facts: {}, search: "" },
   settingsCache: null,
+  micOn: false,
+  rec: null,
 };
 
 /* ─── API ─────────────────────────────────────────────────────────────── */
@@ -174,7 +176,8 @@ function typingCard() {
     <div class="typing">
       <div class="dots"><i></i><i></i><i></i></div>
       <span class="stage-label">приём запроса…</span>
-    </div>`;
+    </div>
+    <div class="thoughts-live" hidden><span class="tl-head">💭 LUMEN думает</span><ul></ul></div>`;
   return el;
 }
 
@@ -191,6 +194,12 @@ function luminaCard(r) {
     `<span class="tool-chip ${t.ok ? "ok" : "err"}">
        <span class="tk">${t.ok ? "✓" : "✕"}</span>${esc(t.name)} · ${t.ms} мс
      </span>`).join("");
+  const thoughts = (r.thoughts || []).map(t => `<li>${esc(t)}</li>`).join("");
+  const thoughtsBlock = thoughts ? `
+    <details class="thoughts">
+      <summary>💭 как LUMEN думал (${(r.thoughts || []).length})</summary>
+      <ol>${thoughts}</ol>
+    </details>` : "";
   const fb = r.message_id ? `
       <button class="act" data-fb="1" title="Полезно">👍</button>
       <button class="act" data-fb="-1" title="Не совсем">👎</button>` : "";
@@ -202,16 +211,21 @@ function luminaCard(r) {
       <span class="chip">${esc({lumen_core: "LUMEN Core", lhc: "LUMEN Core", heuristic: "LUMEN Core"}[r.backend] || r.backend)} · ${r.latency_ms} мс</span>
     </div>
     <div class="lumina-body">${mdToHtml(r.reply)}</div>
+    ${thoughtsBlock}
     <div class="lumina-footer">
       ${tools || ""}
       <span class="lumina-acts">
         ${fb}
+        <button class="act" data-speak title="Прочитать вслух">🔊</button>
         <button class="act" data-copy title="Копировать">⧉</button>
         <button class="act" data-regen title="Сгенерировать заново">↻</button>
       </span>
     </div>`;
 
   const bodyText = r.reply;
+  el.querySelector("[data-speak]")?.addEventListener("click", (e) => {
+    speakReply(bodyText, e.currentTarget);
+  });
   el.querySelector("[data-copy]")?.addEventListener("click", () => {
     navigator.clipboard?.writeText(bodyText).then(
       () => toast("Скопировано", "ok"), () => toast("Не удалось скопировать", "err"));
@@ -241,6 +255,75 @@ function lastUserText() {
   return last ? last.querySelector(".bubble-user").dataset.text : "";
 }
 
+/* ─── ГОЛОС (голосовые возможности браузера, без внешних API) ─────────── */
+function mdToSpeech(s) {
+  return (s || "")
+    .replace(/```[\s\S]*?```/g, " (код) ")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(^|\s)\*([^*\n]+)\*/g, "$1$2")
+    .replace(/(^|\s)_([^_\n]+)_(?=\s|[.,!?;:)]|$)/gm, "$1$2")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^[#>]+\s*/gm, "")
+    .replace(/[-•*]\s+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speakReply(text, btn) {
+  if (!("speechSynthesis" in window)) {
+    toast("Этот браузер не умеет озвучивать текст", "err");
+    return;
+  }
+  // повторный клик — стоп
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    if (btn) btn.classList.remove("on");
+    return;
+  }
+  const clean = mdToSpeech(text);
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  u.lang = "ru-RU";
+  const ru = speechSynthesis.getVoices().find(v => (v.lang || "").startsWith("ru"));
+  if (ru) u.voice = ru;
+  if (btn) {
+    btn.classList.add("on");
+    u.onend = u.onerror = () => btn.classList.remove("on");
+  }
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+function stopSpeaking() {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+function toggleMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = $("#mic");
+  if (!SR) { toast("Распознавание речи недоступно в этом браузере", "err"); return; }
+  if (state.micOn) { state.rec?.stop(); return; }
+  const rec = new SR();
+  rec.lang = "ru-RU";
+  rec.interimResults = false;
+  rec.onresult = (e) => {
+    const t = e.results[0][0].transcript;
+    $("#input").value = t;
+    autoGrow();
+  };
+  rec.onend = () => { state.micOn = false; btn?.classList.remove("on"); };
+  rec.onerror = (e) => {
+    state.micOn = false; btn?.classList.remove("on");
+    if (e.error !== "aborted") toast("Голос: " + e.error, "err");
+  };
+  state.rec = rec;
+  rec.start();
+  state.micOn = true;
+  btn?.classList.add("on");
+  toast("Слушаю… говорите", "ok");
+}
+
 async function send(text) {
   const msg = (text ?? $("#input").value).trim();
   if (!msg || state.busy) return;
@@ -265,6 +348,17 @@ async function send(text) {
   scrollChat();
 
   const stageLabel = $(".stage-label", tEl);
+  const tLive = $(".thoughts-live", tEl);
+  const tList = tLive ? $("ul", tLive) : null;
+  const pushThought = (text) => {
+    if (!tList) return;
+    tLive.hidden = false;
+    const li = document.createElement("li");
+    li.textContent = text;
+    tList.appendChild(li);
+    while (tList.children.length > 4) tList.firstChild.remove();
+    tLive.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+  };
   const fail = (err) => {
     tEl.remove();
     const e = document.createElement("div");
@@ -307,6 +401,9 @@ async function send(text) {
         if (ev === "result") result = payload;
         else if (ev === "error") throw new Error(payload.error || "ошибка ядра");
         else if (ev === "start" && payload.session_id) state.sessionId = payload.session_id;
+        else if (ev === "thought") {
+          pushThought(payload.text || "");
+        }
         else if (ev === "stage" && stageLabel) {
           if (payload.stage === "tool") {
             stageLabel.textContent = `инструмент: ${payload.name}…`;
@@ -319,9 +416,14 @@ async function send(text) {
     tEl.remove();
     if (result) {
       state.sessionId = result.session_id || state.sessionId;
-      inner.appendChild(luminaCard(result));
+      const card = luminaCard(result);
+      inner.appendChild(card);
       if (result.harvested?.length) {
         toast(`Запомнено автоматически: ${result.harvested.map(h => h.value).join(", ")}`, "ok");
+      }
+      if (state.settingsCache?.voice?.auto_speak) {
+        const speakBtn = card.querySelector("[data-speak]");
+        speakReply(result.reply, speakBtn);
       }
     } else {
       fail(new Error("поток завершён без ответа"));
@@ -529,8 +631,9 @@ async function loadSystem() {
   const grid = $("#sys-grid");
   grid.innerHTML = `<div class="sys-card"><div class="mem-empty">Загрузка…</div></div>`;
   try {
-    const [sys, health, learn] = await Promise.all([
+    const [sys, health, learn, auto, thoughts] = await Promise.all([
       api("/api/system"), api("/api/health"), api("/api/learning/stats"),
+      api("/api/learning/auto"), api("/api/thoughts?limit=8").catch(() => ({ thoughts: [] })),
     ]);
     const p = sys.platform || {};
     const mem = sys.mem || {}, disk = sys.disk || {};
@@ -540,6 +643,23 @@ async function loadSystem() {
     };
     const topIntents = Object.entries(learn.intents || {})
       .slice(0, 5).map(([k, v]) => `${INTENT_RU[k] || k} — ${v}`).join(" · ") || "—";
+    const autoOn = auto.enabled
+      ? `каждые ${Math.round(auto.interval_sec)} с · циклов: ${auto.runs} · последний: ${auto.last_run_iso || "—"}`
+      : "выключено";
+    const lastLearned = auto.last_summary
+      ? (auto.last_summary.facts?.length ? `новое: ${auto.last_summary.facts.join(", ")}`
+         : auto.last_summary.focus ? `фокус: ${auto.last_summary.focus}` : "без новых фактов")
+      : "—";
+    const thoughtsHtml = (thoughts.thoughts || []).length
+      ? thoughts.thoughts.slice().reverse().map(t => `
+          <div class="thought-row">
+            <span class="t-time">${esc((t.iso || "").slice(11) || "")}</span>
+            <span class="t-who">${esc(INTENT_RU[t.intent] || t.intent || "")}</span>
+            <span class="t-what">${esc(t.message || "")}</span>
+          </div>
+          <div class="t-thoughts">${(t.thoughts || []).slice(0, 3).map(x => `<div>• ${esc(x)}</div>`).join("")}</div>`
+        ).join("")
+      : `<div class="mem-empty">Пока нет записей — поговорите с LUMEN.</div>`;
     grid.innerHTML = `
       <div class="sys-card">
         <h3>◈ Платформа</h3>
@@ -564,6 +684,9 @@ async function loadSystem() {
         <div class="kv"><span class="k">Оценок (👍/)</span><span class="v">${learn.feedback_positive ?? 0} / ${learn.feedback_negative ?? 0}</span></div>
         <div class="kv"><span class="k">Уровень одобрения</span><span class="v">${Math.round((learn.approval_rate ?? 0) * 100)}%</span></div>
         <div class="kv"><span class="k">Топ намерений</span><span class="v">${esc(topIntents)}</span></div>
+        <div class="kv" style="margin-top:8px"><span class="k">Самообучение</span>
+          <span class="v" style="color:var(--good)">● ${esc(autoOn)}</span></div>
+        <div class="kv"><span class="k">Последний цикл</span><span class="v">${esc(lastLearned)}</span></div>
         ${(learn.learned_preferences || []).length ? `
           <div style="margin-top:8px;color:var(--muted);font-size:12.5px">
             <b>Выученные предпочтения:</b>
@@ -575,6 +698,13 @@ async function loadSystem() {
         <div class="kv"><span class="k">Инструментов</span><span class="v">${p.tools_available ?? 0} из ${p.tools_total ?? 0} доступно</span></div>
         <div class="kv"><span class="k">Фактов в памяти</span><span class="v">${p.facts ?? 0}</span></div>
         <div class="kv"><span class="k">Ядро отвечает</span><span class="v" style="color:var(--good)">● да</span></div>
+      </div>
+      <div class="sys-card">
+        <h3>💭 Мысли LUMEN (последние)</h3>
+        <div style="color:var(--muted);font-size:12px;margin-bottom:6px">
+          Живой журнал рассуждений: что LUMEN делал на каждом шаге.
+        </div>
+        ${thoughtsHtml}
       </div>`;
 
     $("#pipeline-card").innerHTML = `
@@ -666,14 +796,13 @@ async function loadSettings() {
         </div>
         <h3 style="margin-top:8px">Голос</h3>
         <div class="set-row check">
-          <label>Включить голосовой модуль (voice.enabled)</label>
-          <input id="s-voice" type="checkbox" ${v.enabled ? "checked" : ""}/>
+          <label>Говорить ответы вслух (voice.auto_speak)</label>
+          <input id="s-autospeak" type="checkbox" ${v.auto_speak ? "checked" : ""}/>
         </div>
-        <div class="set-row"><label>Движок TTS</label>
-          <select id="s-tts">
-            <option value="edge" ${v.tts_engine === "edge" ? "selected" : ""}>edge-tts</option>
-          </select>
-          <span class="hint-inline">Нужен установленный edge-tts на машине.</span></div>
+        <div class="hint-inline" style="margin-top:2px">
+          Голос — движки самого браузера (ru-RU), без внешних API.
+          Кнопка 🎤 в поле ввода — диктовать текст голосом.
+        </div>
       </div>
       <div class="set-card">
         <h3>Внешний вид</h3>
@@ -713,7 +842,7 @@ async function saveSettings() {
                max_facts: parseInt(val("#s-facts") || "6", 10) },
     safety: { max_input_length: parseInt(val("#s-maxlen") || "8000", 10),
               block_injection: chk("#s-block") },
-    voice: { enabled: chk("#s-voice"), tts_engine: val("#s-tts") },
+    voice: { auto_speak: chk("#s-autospeak") },
     ui: { theme: val("#s-theme") },
   };
   try {
@@ -762,6 +891,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#send").addEventListener("click", () => send());
   $("#new-session").addEventListener("click", newSession);
+  $("#mic")?.addEventListener("click", toggleMic);
 
   // память
   $("#mem-add-btn").addEventListener("click", async () => {

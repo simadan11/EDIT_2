@@ -30,6 +30,7 @@ from .. import BRAND_NAME, MODEL_NAME, VERSION, TAGLINE
 from ..config import LumenConfig, BASE_DIR, DATA_DIR
 from ..kernel.backends import get_backend, LumenCoreBackend
 from ..kernel.engine import LumenEngine, create_engine
+from ..kernel.learning import AutoLearner
 from ..io.voice import VoiceModule
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -43,6 +44,12 @@ class LumenServer:
         self.config = config or LumenConfig()
         self.engine: LumenEngine = create_engine(self.config)
         self.voice = VoiceModule(self.config)
+        # фоновое самообучение: по умолчанию каждую минуту
+        self.auto_learner = AutoLearner(
+            self.engine,
+            interval_sec=float(self.config.get("learning.auto_interval_sec", 60)),
+            enabled=bool(self.config.get("learning.auto_enabled", True)))
+        self.auto_learner.start()
         self.started = time.time()
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._handler = self._make_handler()
@@ -68,6 +75,7 @@ class LumenServer:
         return self._httpd
 
     def shutdown(self) -> None:
+        self.auto_learner.stop()
         if self._httpd:
             self._httpd.shutdown()
             self._httpd.server_close()
@@ -146,11 +154,16 @@ class LumenServer:
                              "learned": self.engine.learning.learned_preferences()}
             if method == "GET" and p == "/api/learning/stats":
                 return 200, self.engine.learning.stats()
+            if method == "GET" and p == "/api/learning/auto":
+                return 200, self.auto_learner.status()
             if method == "POST" and p == "/api/learning/corpus":
                 out = DATA_DIR / "export" / "corpus.jsonl"
                 n = self.engine.learning.export_corpus(
                     out, self.engine.memory.sessions_dir)
                 return 200, {"count": n, "path": str(out)}
+            if method == "GET" and p == "/api/thoughts":
+                limit = int(body.get("limit", 30) or 30)
+                return 200, {"thoughts": self.engine.thoughts(limit)}
             if method == "POST" and p == "/api/voice/speak":
                 from ..io.text import strip_for_speech
                 res = self.voice.speak(strip_for_speech(str(body.get("text", ""))))
@@ -313,7 +326,8 @@ class LumenServer:
                     if method in ("POST", "PUT", "DELETE"):
                         body = self._read_body()
                     if method == "GET" and (path.startswith("/api/memory") or
-                                            path.startswith("/api/sessions")):
+                                            path.startswith("/api/sessions") or
+                                            path == "/api/thoughts"):
                         body = self._query()
                     if method == "DELETE" and path.startswith("/api/sessions/"):
                         body = {}

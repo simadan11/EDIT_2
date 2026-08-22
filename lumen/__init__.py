@@ -25,7 +25,7 @@ BRAND_NAME = "LUMEN"
 BRAND_NAME_RU = "Люмен"
 MODEL_NAME = "LUMEN-1"
 TAGLINE = "Свет, который понимает"
-VERSION = "1.0.0"
+VERSION = "1.3.0"
 PIPELINE_NAME = "Луч"
 
 __version__ = VERSION

@@ -77,10 +77,19 @@ def default_config() -> Dict[str, Any]:
             "timeout_sec": 20,
             "enable_legacy_bridge": True,
         },
+        "learning": {
+            # фоновое самообучение: каждые 60 секунд LUMEN сам прогоняет
+            # свежие реплики через harvest, пересчитывает «фокус» и пишет
+            # heartbeat (lumen_data/learning/heartbeat.jsonl)
+            "auto_enabled": True,
+            "auto_interval_sec": 60,
+        },
         "voice": {
             "enabled": False,
             "tts_engine": "edge",
             "stt_engine": "auto",
+            # голос в веб-интерфейсе: читать ответы вслух автоматически
+            "auto_speak": False,
         },
         "ui": {"theme": "dark"},
         "api": {

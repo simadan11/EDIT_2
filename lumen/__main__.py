@@ -2,6 +2,7 @@
 LUMEN — командная строка.
 
     python -m lumen serve [--host H] [--port P]   # платформа + веб-интерфейс
+    python -m lumen desktop                       # настольная программа (окно)
     python -m lumen chat                          # диалог в терминале
     python -m lumen tools                         # список инструментов
     python -m lumen tools run <имя> [--arg k=v]   # запуск инструмента
@@ -33,6 +34,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
     _print_banner()
     run_server(host=args.host, port=args.port, block=True)
     return 0
+
+
+def cmd_desktop(args: argparse.Namespace) -> int:
+    from .desktop import run as run_desktop
+    _print_banner()
+    print("  Настольная программа: окно с диалогом, «LUMEN думает…»,")
+    print("  голос (pip install pyttsx3) и самообучение каждую минуту.")
+    return run_desktop()
 
 
 def _engine() -> "tuple":
@@ -141,6 +150,8 @@ def main(argv=None) -> int:
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8090)
 
+    sub.add_parser("desktop", help="настольная программа (окно: диалог, голос, мысли)")
+
     sub.add_parser("chat", help="диалог в терминале")
     p = sub.add_parser("tools", help="инструменты")
     psub = p.add_subparsers(dest="tools_command")
@@ -167,6 +178,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.command == "serve":
         return cmd_serve(args)
+    if args.command == "desktop":
+        return cmd_desktop(args)
     if args.command == "chat":
         return cmd_chat(args)
     if args.command == "tools":

@@ -496,6 +496,54 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .toast.err { border-left-color: var(--bad); }
 .toast.ok { border-left-color: var(--good); }
 
+/* ═══ МЫСЛИ LUMEN ═══════════════════════════════════════════════════════ */
+.thoughts-live {
+  margin-top: 10px; padding: 10px 12px;
+  background: rgba(210, 168, 255, .05);
+  border: 1px dashed rgba(210, 168, 255, .35);
+  border-radius: 10px;
+}
+.thoughts-live .tl-head {
+  display: block; font-size: 11.5px; font-weight: 600;
+  color: var(--accent-2, #d2a8ff); margin-bottom: 6px; letter-spacing: .3px;
+}
+.thoughts-live ul { margin: 0; padding-left: 16px; }
+.thoughts-live li { font-size: 12px; color: var(--muted); margin: 2px 0; }
+.thoughts-live li::marker { color: var(--accent-2, #d2a8ff); }
+
+.thoughts { margin-top: 10px; }
+.thoughts summary {
+  cursor: pointer; font-size: 12px; color: var(--accent-2, #d2a8ff);
+  user-select: none; padding: 4px 0;
+}
+.thoughts ol { margin: 6px 0 0; padding-left: 20px; }
+.thoughts li { font-size: 12px; color: var(--muted); margin: 3px 0; }
+.thoughts li::marker { color: var(--accent-2, #d2a8ff); }
+
+.sys-card .thought-row {
+  display: flex; gap: 8px; font-size: 12px; padding: 6px 0;
+  border-top: 1px solid var(--border); align-items: baseline;
+}
+.sys-card .thought-row .t-time { color: var(--muted); font-family: monospace; flex: 0 0 62px; }
+.sys-card .thought-row .t-who {
+  flex: 0 0 auto; font-size: 10.5px; color: var(--accent);
+  border: 1px solid var(--border-strong); border-radius: 20px; padding: 1px 8px;
+}
+.sys-card .thought-row .t-what { color: var(--text); }
+.sys-card .t-thoughts { font-size: 11.5px; color: var(--muted); padding: 0 0 4px 70px; }
+
+/* ═══ МИКРОФОН ═══════════════════════════════════════════════════════════ */
+.mic-btn {
+  flex: 0 0 auto; width: 40px; height: 40px; margin-right: 6px;
+  border: 1px solid var(--border-strong); background: var(--panel-2);
+  border-radius: 10px; cursor: pointer; display: grid; place-items: center;
+}
+.mic-btn svg { width: 19px; height: 19px; fill: var(--muted); }
+.mic-btn:hover { border-color: var(--accent); }
+.mic-btn:hover svg { fill: var(--accent); }
+.mic-btn.on { border-color: var(--bad); background: rgba(248, 81, 73, .1); animation: pulse 1.2s infinite; }
+.mic-btn.on svg { fill: var(--bad); }
+
 /* ═══ АДАПТИВ ═══════════════════════════════════════════════════════════ */
 @media (max-width: 900px) {
   .rail { width: 66px; padding: 14px 8px; }
