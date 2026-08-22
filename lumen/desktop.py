@@ -320,7 +320,11 @@ class _LumenDesktopTk:
         try:
             while True:
                 fn, args = self._ui_q.get_nowait()
-                fn(*args)
+                try:
+                    fn(*args)
+                except Exception as e:  # noqa: BLE001 — окно не падает
+                    print(f"  [lumen-desktop] GUI-ошибка: "
+                          f"{type(e).__name__}: {e}")
         except queue.Empty:
             pass
         self.root.after(100, self._pump)
@@ -339,7 +343,7 @@ class _LumenDesktopTk:
         def worker() -> None:
             def on_thought(phase: str, t: str) -> None:
                 self._ui(self._thought_lbl.configure,
-                         ("   💭 " + t[:160],))
+                         {"text": "   💭 " + t[:160]})
 
             try:
                 resp = self.session.send(text, on_thought=on_thought)
@@ -348,17 +352,17 @@ class _LumenDesktopTk:
                         + (f" · инструменты: "
                            + ", ".join(t["name"] for t in resp.tools_used)
                            if resp.tools_used else "") + "\n")
-                self._ui(self._append, ("lumen", f"\nLUMEN › {resp.reply}\n"))
-                self._ui(self._append, ("meta", meta))
-                self._ui(self._thought_lbl.configure, ("",))
+                self._ui(self._append, "lumen", f"\nLUMEN › {resp.reply}\n")
+                self._ui(self._append, "meta", meta)
+                self._ui(self._thought_lbl.configure, {"text": ""})
                 if self._voice_var.get():
-                    self._ui(self._speak, (resp.reply,))
+                    self._ui(self._speak, resp.reply)
                 else:
-                    self._ui(self._set_state, (self.STANDBY,))
+                    self._ui(self._set_state, self.STANDBY)
             except Exception as e:  # noqa: BLE001
-                self._ui(self._append, ("meta", f"\n   ✕ ошибка: {e}\n"))
-                self._ui(self._thought_lbl.configure, ("",))
-                self._ui(self._set_state, (self.STANDBY,))
+                self._ui(self._append, "meta", f"\n   ✕ ошибка: {e}\n")
+                self._ui(self._thought_lbl.configure, {"text": ""})
+                self._ui(self._set_state, self.STANDBY)
             finally:
                 self._busy = False
 
@@ -381,7 +385,7 @@ class _LumenDesktopTk:
             except Exception:
                 pass
             finally:
-                self._ui(self._set_state, (self.STANDBY,))
+                self._ui(self._set_state, self.STANDBY)
 
         threading.Thread(target=worker, daemon=True).start()
 

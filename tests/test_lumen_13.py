@@ -207,5 +207,205 @@ class TestDesktop(unittest.TestCase):
             s.stop()
 
 
+class TestDesktopGuiHeadless(unittest.TestCase):
+    """Окно desktop.py под mock-tkinter: конструктор, очередь UI, поток отправки.
+
+    Mock имитирует строгость Tk 8.6: padx/pady в конструкторе виджета —
+    только числа; configure(позиционный_аргумент) — только dict;
+    неизвестные опции — ошибка. Поймано: pady=(4,10),
+    configure(("текст",)), disabledforeground.
+    """
+
+    _KNOWN = {
+        "Tk": {"bg", "fg"},
+        "Frame": {"bg", "fg", "padx", "pady", "bd", "relief"},
+        "Label": {"bg", "fg", "font", "anchor", "padx", "pady", "text",
+                  "relief", "justify", "wraplength"},
+        "Button": {"bg", "fg", "font", "text", "command", "relief", "bd",
+                   "activebackground", "activeforeground", "padx", "pady",
+                   "width", "height", "highlightbackground", "highlightcolor"},
+        "Entry": {"font", "bg", "fg", "insertbackground", "relief",
+                  "highlightthickness", "highlightbackground", "highlightcolor"},
+        "Checkbutton": {"variable", "bg", "fg", "activebackground",
+                        "activeforeground", "selectcolor", "font", "bd",
+                        "padx", "pady", "text", "command"},
+        "Canvas": {"bg", "fg", "width", "height", "highlightthickness",
+                   "highlightbackground", "highlightcolor", "bd", "relief",
+                   "scrollregion"},
+    }
+
+    def _make_mock(self):
+        import types
+
+        known = {
+            "Tk": self._KNOWN["Tk"],
+            "Frame": self._KNOWN["Frame"],
+            "Label": self._KNOWN["Label"],
+            "Button": self._KNOWN["Button"],
+            "Entry": self._KNOWN["Entry"],
+            "Checkbutton": self._KNOWN["Checkbutton"],
+            "Canvas": self._KNOWN["Canvas"],
+            "Text": {"bg", "fg", "font", "wrap", "state", "relief",
+                     "padx", "pady", "width", "height", "insertbackground",
+                     "highlightthickness", "highlightbackground",
+                     "highlightcolor", "selectbackground", "selectforeground"},
+        }
+
+        class FakeWidget:
+            _cls = "Frame"
+
+            def __init__(self, master=None, **kw):
+                self.master, self.cfg = master, {}
+                allowed = known.get(self._cls, set())
+                for k, v in kw.items():
+                    if k not in allowed:
+                        raise TypeError(f"unknown option -{k}")
+                    if k in ("padx", "pady") and isinstance(v, (tuple, list)):
+                        raise TypeError(f"bad screen distance {v!r}")
+
+            def configure(self, cnf=None, **kw):
+                if cnf is not None and not isinstance(cnf, dict):
+                    raise ValueError(
+                        "dictionary update sequence element #0 has length 1;"
+                        " 2 is required")
+                self.cfg = {**(cnf or {}), **kw}
+
+            def pack(self, **kw):
+                pass
+
+            def bind(self, *a, **kw):
+                pass
+
+            def focus_set(self):
+                pass
+
+            def destroy(self):
+                pass
+
+        class FakeTk(FakeWidget):
+            _cls = "Tk"
+
+            def __init__(self):
+                super().__init__()
+                self.title_s = self.geom = None
+
+            def title(self, t):
+                self.title_s = t
+
+            def geometry(self, g):
+                self.geom = g
+
+            def minsize(self, *a):
+                pass
+
+            def protocol(self, *a):
+                pass
+
+            def after(self, ms, fn):
+                pass  # не вызываем — иначе цикл анимации бесконечный
+
+            def winfo_width(self):
+                return 900
+
+            def winfo_height(self):
+                return 236
+
+        class FakeCanvas(FakeWidget):
+            _cls = "Canvas"
+
+            def delete(self, *a):
+                pass
+
+            def create_oval(self, *a, **kw):
+                return 1
+
+            def create_rectangle(self, *a, **kw):
+                return 1
+
+            def create_text(self, *a, **kw):
+                return 1
+
+            def winfo_width(self):
+                return 900
+
+            def winfo_height(self):
+                return 236
+
+        class FakeEntry(FakeWidget):
+            _cls = "Entry"
+            preset = ""
+
+            def get(self):
+                return self.preset
+
+            def delete(self, *a):
+                pass
+
+        class FakeScrolledText(FakeWidget):
+            _cls = "Text"
+            _inserted = []
+
+            def tag_config(self, *a, **kw):
+                pass
+
+            def insert(self, idx, text, tag=""):
+                FakeScrolledText._inserted.append((tag, text))
+
+            def see(self, *a):
+                pass
+
+        class FakeBoolVar:
+            def __init__(self, value=False):
+                self._v = value
+
+            def get(self):
+                return self._v
+
+        class FakeFrame(FakeWidget):
+            _cls = "Frame"
+
+        class FakeLabel(FakeWidget):
+            _cls = "Label"
+
+        class FakeButton(FakeWidget):
+            _cls = "Button"
+
+        class FakeCheckbutton(FakeWidget):
+            _cls = "Checkbutton"
+
+        tk_mod = types.SimpleNamespace(
+            Tk=FakeTk, Frame=FakeFrame, Label=FakeLabel,
+            Button=FakeButton, Checkbutton=FakeCheckbutton,
+            Canvas=FakeCanvas, Entry=FakeEntry, BooleanVar=FakeBoolVar)
+        st_mod = types.SimpleNamespace(ScrolledText=FakeScrolledText)
+        return tk_mod, st_mod, FakeScrolledText
+
+    def test_desktop_gui_construct_and_send(self):
+        from lumen.desktop import _LumenDesktopTk, DesktopSession
+        env = make_env()
+        tk_mod, st_mod, FakeScrolledText = self._make_mock()
+        session = DesktopSession(env["cfg"])
+        FakeScrolledText._inserted.clear()
+        try:
+            ui = _LumenDesktopTk(tk_mod, st_mod, session)
+            # очередь UI: pump не падает
+            ui._pump()
+            # отправка: настоящий воркер + настоящий engine
+            ui.entry.preset = "Вычисли 6*7"
+            ui._on_send()
+            deadline = time.time() + 10
+            while ui._busy and time.time() < deadline:
+                time.sleep(0.05)
+                ui._pump()
+            ui._pump()
+            self.assertFalse(ui._busy)
+            all_text = "".join(t for _tag, t in FakeScrolledText._inserted)
+            self.assertIn("LUMEN ›", all_text)
+            self.assertIn("42", all_text)
+            self.assertEqual(ui._state, "STANDBY")
+        finally:
+            session.stop()
+
+
 if __name__ == "__main__":
     unittest.main()
