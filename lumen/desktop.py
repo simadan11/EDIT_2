@@ -159,10 +159,9 @@ class _LumenDesktopTk:
         body.pack(fill="both", expand=True, padx=14, pady=(2, 0))
         self.chat = scrolledtext.ScrolledText(
             body, wrap="word", state="disabled", font=("Consolas", 11),
-            bg=PANEL, fg=TEXT, relief="flat", padx=12, pady=10,
+            bg=PANEL, fg=WHITE, relief="flat", padx=12, pady=10,
             insertbackground=PRI, highlightthickness=1,
-            highlightbackground=BORDER, highlightcolor=BORDER_B,
-            disabledforeground=WHITE)
+            highlightbackground=BORDER, highlightcolor=BORDER_B)
         self.chat.pack(fill="both", expand=True)
         self.chat.tag_config("user", foreground=PRI, font=("Consolas", 11, "bold"))
         self.chat.tag_config("lumen", foreground=WHITE)
