@@ -142,7 +142,7 @@ class _LumenDesktopTk:
         self._thought_lbl.pack(fill="x")
 
         # ── ввод ────────────────────────────────────────────────────────────
-        inp = tk.Frame(self.root, padx=14, pady=(4, 10))
+        inp = tk.Frame(self.root, padx=14, pady=4)
         inp.pack(fill="x")
         self.entry = tk.Entry(inp, font=("Consolas", 11))
         self.entry.pack(side="left", fill="both", expand=True, padx=(0, 8))
@@ -157,7 +157,7 @@ class _LumenDesktopTk:
 
         # ── статус-бар ──────────────────────────────────────────────────────
         self._bar = tk.Label(self.root, anchor="w", foreground="#8b949e",
-                             font=("Segoe UI", 9), padx=14, pady=(0, 6))
+                             font=("Segoe UI", 9), padx=14, pady=2)
         self._bar.pack(fill="x")
         self._tick_bar()
 
