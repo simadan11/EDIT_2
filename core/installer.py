@@ -1,5 +1,5 @@
 """
-MARK XL — Dependency auto-installer.
+LUMEN — Dependency auto-installer.
 
 Called automatically on first launch and after engine reconfiguration.
 Installs only the packages that are actually missing, then exits cleanly.
@@ -136,3 +136,4 @@ def install_for_config(config: dict, log: Callable | None = None) -> None:
 
     if log:
         log("SYS: All dependencies ready ✓")
+

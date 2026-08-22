@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download the vision models EDITH needs, with verification.
+Download the vision models LUMEN needs, with verification.
 
 Run once:
 
@@ -90,7 +90,7 @@ def fetch(name: str, spec: dict) -> bool:
         try:
             print(f"  ↓ {name} … ", end="", flush=True)
             req = urllib.request.Request(
-                url, headers={"User-Agent": "Mozilla/5.0 (JARVIS setup)"}
+                url, headers={"User-Agent": "Mozilla/5.0 (LUMEN setup)"}
             )
             with urllib.request.urlopen(req, timeout=60) as r:   # noqa: S310
                 data = r.read()
@@ -110,7 +110,7 @@ def fetch(name: str, spec: dict) -> bool:
 
 
 def main() -> int:
-    print("EDITH vision models →", CONFIG)
+    print("LUMEN vision models →", CONFIG)
     print()
     missing = []
     for name, spec in MODELS.items():
@@ -120,7 +120,7 @@ def main() -> int:
         print()
 
     if not missing:
-        print("All models ready. Restart JARVIS to enable the full HUD.")
+        print("All models ready. Restart LUMEN to enable the full HUD.")
         return 0
 
     print("=" * 66)
@@ -144,3 +144,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nCancelled.")
         sys.exit(130)
+

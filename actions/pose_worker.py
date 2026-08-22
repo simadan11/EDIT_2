@@ -10,7 +10,7 @@ simple length-prefixed protocol:
 Why a separate process?  MediaPipe's VIDEO pipeline is native C++ and calls
 abort() on contract violations, OOM or malformed tensors. A native abort
 raises SIGABRT, which **cannot** be caught by Python try/except — it would
-take the whole JARVIS window down with it. Here, a crash only kills this
+take the whole LUMEN window down with it. Here, a crash only kills this
 worker; the parent notices, restarts it (or degrades gracefully) and the UI
 never even flickers.
 
@@ -372,3 +372,4 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         sys.exit(0)
+

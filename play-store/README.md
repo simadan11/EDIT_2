@@ -1,4 +1,4 @@
-# 🤖 EDIT Remote — приложение для Google Play (TWA / Bubblewrap)
+# 🤖 LUMEN Remote — приложение для Google Play (TWA / Bubblewrap)
 
 Панель Remote Control уже является установочным PWA. Чтобы получить настоящее
 Android-приложение для Google Play, используется **Trusted Web Activity (TWA)** —
@@ -8,11 +8,11 @@ Android-приложение для Google Play, используется **Trus
 ```
 Google Play  →  app-release-signed.aab  →  Bubblewrap (Android-проект из PWA)
                                                        ↕ Digital Asset Links
-                        https://remote.edit.com  ←  дашборд EDIT на вашем ПК
+                        https://remote.lumen.com  ←  дашборд LUMEN на вашем ПК
 ```
 
 > **Пререквизит №1:** нужен постоянный публичный HTTPS-адрес дашборда.
-> Это наш `remote.edit.com` из `cloudflare/` (туннель). Быстрый
+> Это наш `remote.lumen.com` из `cloudflare/` (туннель). Быстрый
 > `trycloudflare.com`-URL **не подходит** — он меняется при каждом запуске,
 > а assetlinks жёстко привязаны к домену.
 
@@ -32,15 +32,15 @@ npm i -g @bubblewrap/cli
 ## Шаг 2. Сгенерировать Android-проект
 
 ```powershell
-mkdir EDIT-TWA; cd EDIT-TWA
-bubblewrap init --manifest https://remote.edit.com/manifest.webmanifest
+mkdir LUMEN-TWA; cd LUMEN-TWA
+bubblewrap init --manifest https://remote.lumen.com/manifest.webmanifest
 ```
 
 Ответы мастера:
 | Вопрос | Значение |
 |---|---|
-| Package name | `com.edit.remote` |
-| App name | `EDIT Remote` |
+| Package name | `com.lumen.remote` |
+| App name | `LUMEN Remote` |
 | Launcher icon / splash | берутся из манифеста (icons 192/512 уже maskable-ready) |
 | Signing key | создать новый (bubblewrap сделает `android.keystore`) — **сохраните файл и пароль навсегда**, без них нельзя обновлять приложение |
 
@@ -66,13 +66,13 @@ bubblewrap fingerprint generateAssetLinks            # → assetlinks.json
 dashboard/static/.well-known/assetlinks.json
 ```
 
-Сервер уже отдаёт его по `https://remote.edit.com/.well-known/assetlinks.json`
-(роут добавлен в `dashboard/server.py`). Перезапустите EDIT и проверьте в
+Сервер уже отдаёт его по `https://remote.lumen.com/.well-known/assetlinks.json`
+(роут добавлен в `dashboard/server.py`). Перезапустите LUMEN и проверьте в
 браузере — должен отдаваться JSON со статусом 200.
 
 > Если приложение открывается **с адресной строкой** браузера — assetlinks не
 > совпали (отпечаток/пакет) или недоступны по URL. Проверка связки:
-> `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://remote.edit.com&relation=delegate_permission/common.handle_all_urls`
+> `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://remote.lumen.com&relation=delegate_permission/common.handle_all_urls`
 
 ## Шаг 5. Тест на телефоне
 
@@ -82,12 +82,12 @@ bubblewrap install        # телефон по USB, включена отлад
 ```
 
 Откройте: fullscreen-дашборд, введите PIN — работает голосовой канал,
-наушники, EDITH-камера (всё то же, что в PWA).
+наушники, LUMEN-камера (всё то же, что в PWA).
 
 ## Шаг 6. Google Play Console
 
 1. **Аккаунт разработчика** — https://play.google.com/console ($25 один раз).
-2. **Create app**: название `EDIT Remote`, язык ru, категория «Инструменты».
+2. **Create app**: название `LUMEN Remote`, язык ru, категория «Инструменты».
 3. **Production → New release →** загрузить `app-release-signed.aab`.
    - Включите **Play App Signing** (рекомендуется); тогда в assetlinks надо
      добавить **ещё один** fingerprint — SHA-256 из
@@ -95,7 +95,7 @@ bubblewrap install        # телефон по USB, включена отлад
      `bubblewrap fingerprint add <плей-фингерпринт>` и обновить
      `dashboard/static/.well-known/assetlinks.json`.
 4. Заполнить магазинную карточку:
-   - Краткое описание: «Удалённое управление голосовым ассистентом EDIT: микрофон, наушники, камера, файлы.»
+   - Краткое описание: «Удалённое управление голосовым ассистентом LUMEN: микрофон, наушники, камера, файлы.»
    - Полное: использовать текст из секции «Capabilities» основного README.
    - Иконка 512×512 — `dashboard/static/icons/icon-512.png`.
    - Скриншоты: 2–8 шт. с телефона (портрет).
@@ -120,6 +120,7 @@ bubblewrap build           # новый AAB (versionCode увеличится с
   ваш дашборд, а не самостоятельный ассистент.
 - Один и тот же `assetlinks.json` можно держать и для пути
   через Workers (`workers.dev`) — но origin в TWA должен быть один:
-  выберите основной адрес (`remote.edit.com`) и им пользуйтесь.
+  выберите основной адрес (`remote.lumen.com`) и им пользуйтесь.
 - Шаблон файла — `play-store/assetlinks.template.json` (обычно проще
   сгенерировать через `bubblewrap fingerprint generateAssetLinks`).
+

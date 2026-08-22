@@ -1,7 +1,7 @@
-# actions/voice_features.py — интеграция функций из jarvis_import/core/
+# actions/voice_features.py — голосовые функции (wakeword, тишина, TTS)
 """Wakeword, silence detection, TTS optimization, offline fallback."""
 
-WAKEWORDS = ["эдит", "edit", "edith", "едит", "эдита", "джарвис", "jarvis", "чарльз", "джервис"]
+WAKEWORDS = ["lumen", "люмен", "люмена", "люмени"]
 
 
 def wakeword_detect(text: str) -> bool:
@@ -28,3 +28,4 @@ def silence_detect(last_voice_time: float, silence_timeout: float = 1.2) -> bool
 
 def offline_fallback() -> str:
     return "Нет интернета — работаю в автономном режиме. Mогу искать в DDG или отвечать по памяти."
+

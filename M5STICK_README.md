@@ -1,6 +1,6 @@
 # 🔌 M5Stick USB Controller — Полное руководство
 
-Модуль для подключения и управления M5StickC/Plus по USB в проекте MARK L.
+Модуль для подключения и управления M5StickC/Plus по USB в проекте LUMEN.
 
 ## 📋 Содержание
 
@@ -32,7 +32,7 @@
 | Вибро | ❌ | ❌ | ✅ |
 | LED | ❌ | ИК (GPIO19) | ИК (GPIO19) |
 
-### Зачем M5Stick в MARK L?
+### Зачем M5Stick в LUMEN?
 
 - **Второй экран** — отображение статуса, уведомлений, времени
 - **Физические кнопки** — быстрый доступ к функциям ассистента
@@ -258,7 +258,7 @@ ctrl.display_text("Hello World", x=10, y=40, size=2, color="#00FF00")
 ctrl.display_clear()
 
 # Заголовок
-ctrl.display_title("MARK L", "Connected")
+ctrl.display_title("LUMEN", "Connected")
 
 # Эмодзи-лицо
 ctrl.display_face("happy")  # happy, sad, angry, surprised, sleepy, cool, love
@@ -487,7 +487,7 @@ ctrl.sleep(0)  # глубокий сон до нажатия кнопки
 ```json
 {"cmd": "text", "text": "Hello", "x": 0, "y": 0, "size": 2, "color": "#FFFFFF"}
 {"cmd": "clear", "color": "#000000"}
-{"cmd": "title", "title": "MARK L", "subtitle": "Connected"}
+{"cmd": "title", "title": "LUMEN", "subtitle": "Connected"}
 {"cmd": "face", "expression": "happy"}
 {"cmd": "led", "color": "cyan", "brightness": 80}
 {"cmd": "blink", "color": "red", "times": 3, "interval": 200}
@@ -587,7 +587,7 @@ while True:
 ## 📁 Структура файлов
 
 ```
-MARK L/
+LUMEN/
 ├── actions/
 │   ├── m5stick.py              # Основной контроллер USB
 │   └── m5stick_action.py       # Голосовые команды
@@ -600,5 +600,6 @@ MARK L/
 
 ---
 
-**Разработано для MARK L — персонального AI ассистента**
+**Разработано для LUMEN — персонального AI ассистента**
 **M5Stick USB Controller v1.0**
+

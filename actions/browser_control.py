@@ -107,7 +107,7 @@ def _real_profile_dir(browser: str) -> str:
             print(f"[Browser] ✅ Real profile found for {browser}: {p}")
             return str(p)
 
-    fallback = home / ".jarvis_profiles" / browser
+    fallback = home / ".lumen_profiles" / browser
     fallback.mkdir(parents=True, exist_ok=True)
     print(f"[Browser] ⚠️  Real profile not found for {browser}, using: {fallback}")
     return str(fallback)
@@ -533,7 +533,7 @@ class _BrowserSession:
 
         if engine_name == "firefox":
             profile = _firefox_profile_dir() or str(
-                Path.home() / ".jarvis_profiles" / "firefox"
+                Path.home() / ".lumen_profiles" / "firefox"
             )
             kwargs: dict = {
                 "headless":    False,
@@ -547,17 +547,17 @@ class _BrowserSession:
             try:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
             except Exception as e:
-                print(f"[Browser] Firefox real profile failed ({e}), using JARVIS profile")
-                jarvis = str(Path.home() / ".jarvis_profiles" / "firefox_jarvis")
-                Path(jarvis).mkdir(parents=True, exist_ok=True)
-                self._context = await engine_obj.launch_persistent_context(jarvis, **kwargs)
+                print(f"[Browser] Firefox real profile failed ({e}), using LUMEN profile")
+                lumen = str(Path.home() / ".lumen_profiles" / "firefox_lumen")
+                Path(lumen).mkdir(parents=True, exist_ok=True)
+                self._context = await engine_obj.launch_persistent_context(lumen, **kwargs)
 
             self._page = await self._adopt_page()
             print(f"[Browser] ✅ Firefox launched")
             return
 
         if engine_name == "webkit":
-            safari_profile = str(Path.home() / ".jarvis_profiles" / "safari")
+            safari_profile = str(Path.home() / ".lumen_profiles" / "safari")
             Path(safari_profile).mkdir(parents=True, exist_ok=True)
             kwargs = {
                 "headless":    False,
@@ -609,16 +609,16 @@ class _BrowserSession:
 
         # Gerçek profil açılamadı (tarayıcı zaten açık / kilitli profil / yeni
         # Chrome sürümleri otomasyonla gerçek profili engelliyor). Kalıcı
-        # JARVIS otomasyon profiline geçilir — buraya bir kez giriş yapılan
+        # LUMEN otomasyon profiline geçilir — buraya bir kez giriş yapılan
         # hesaplar sonraki oturumlarda da açık kalır.
-        jarvis_profile = str(Path.home() / ".jarvis_profiles" / self.browser_name)
-        Path(jarvis_profile).mkdir(parents=True, exist_ok=True)
-        print(f"[Browser] Retrying with JARVIS profile: {jarvis_profile}")
+        lumen_profile = str(Path.home() / ".lumen_profiles" / self.browser_name)
+        Path(lumen_profile).mkdir(parents=True, exist_ok=True)
+        print(f"[Browser] Retrying with LUMEN profile: {lumen_profile}")
 
         try:
-            self._context = await engine_obj.launch_persistent_context(jarvis_profile, **kwargs)
+            self._context = await engine_obj.launch_persistent_context(lumen_profile, **kwargs)
             self._page = await self._adopt_page()
-            print(f"[Browser] ✅ Launched [{label}] with JARVIS profile "
+            print(f"[Browser] ✅ Launched [{label}] with LUMEN profile "
                   f"(sign-ins persist across sessions)")
         except Exception as e2:
             raise RuntimeError(f"Could not launch {self.browser_name}: {e2}") from e2
@@ -805,7 +805,7 @@ class _BrowserSession:
     async def screenshot(self, path: str = None) -> str:
         page = await self._get_page()
         try:
-            save_path = path or str(Path.home() / "Desktop" / "jarvis_screenshot.png")
+            save_path = path or str(Path.home() / "Desktop" / "lumen_screenshot.png")
             await page.screenshot(path=save_path, full_page=False)
             return f"Screenshot saved: {save_path}"
         except Exception as e:

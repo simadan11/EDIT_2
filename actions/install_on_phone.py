@@ -60,10 +60,11 @@ def install_on_phone(
         # Open URL on remote phone browser (if dashboard / session supports it)
         # For now, return instruction; can be extended to send URL via remote session
         lines.append(f"\n[BROWSER] Open this URL on connected phone: {app_source}")
-        lines.append("  If using JARVIS remote dashboard, open link directly on phone.")
+        lines.append("  If using LUMEN remote dashboard, open link directly on phone.")
 
     else:
         lines.append(f"\nUnknown method '{method}'. Use: adb | browser")
 
     lines.append("\nDISCLAIMER: Only install apps you have permission to install. Unauthorized installation violates device policies.")
     return "\n".join(lines)
+

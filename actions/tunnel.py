@@ -1,5 +1,5 @@
 """
-Internet Tunnel (🌐) — доступ к EDIT из любой точки через мобильный интернет.
+Internet Tunnel (🌐) — доступ к LUMEN из любой точки через мобильный интернет.
 
 Когда телефона нет в одной сети с ПК (нет WiFi, только мобильные данные),
 локальный адрес 192.168.x.x:8000 недоступен. Этот модуль поднимает
@@ -18,7 +18,7 @@ Internet Tunnel (🌐) — доступ к EDIT из любой точки че�
      к аккаунту, туннель настраивается в веб-панели (TCP → 127.0.0.1:8001).
   4. portmap.io + OpenVPN     — стандартный клиент openvpn + их .ovpn-профиль
      (config/portmap.ovpn). Публичный адрес задаётся в кабинете portmap
-     (yourname.portmap.io:PORT) и прописывается в конфиг EDIT:
+     (yourname.portmap.io:PORT) и прописывается в конфиг LUMEN:
      "tunnel_engine": "portmap" + "tunnel_static_url".
 
 Для постоянного адреса (Cloudflare-путь): бесплатный аккаунт Cloudflare +
@@ -81,13 +81,13 @@ def _norm_public_url(u: str) -> str:
 
 
 def portmap_hint() -> str:
-    """Инструкция по настройке portmap.io + OpenVPN (показывается в EDIT)."""
+    """Инструкция по настройке portmap.io + OpenVPN (показывается в LUMEN)."""
     return "\n".join([
         "portmap.io + OpenVPN — настройка (один раз):",
         "",
         "  1. Аккаунт: https://portmap.io  (бесплатно)",
         "  2. Создай Configuration → Tunnel → Protocol: TCP",
-        "     → Local port: 8001   (HTTPS-алиас дашборда EDIT)",
+        "     → Local port: 8001   (HTTPS-алиас дашборда LUMEN)",
         "     portmap назначит адрес вида  ваше-имя.portmap.io:12345",
         "  3. Скачай их .ovpn-профиль → положи в  config\\portmap.ovpn",
         "  4. Установи OpenVPN:  https://openvpn.net/community-downloads/",
@@ -95,7 +95,7 @@ def portmap_hint() -> str:
         "  5. В config\\api_keys.json запиши адрес:",
         '       "tunnel_engine": "portmap",',
         '       "tunnel_static_url": "https://ваше-имя.portmap.io:12345"',
-        "  6. Перезапусти EDIT и нажми 🌐.",
+        "  6. Перезапусти LUMEN и нажми 🌐.",
         "",
         "  Телефон (4G): открыть адрес → 1 раз принять сертификат → PIN.",
     ])
@@ -186,7 +186,7 @@ def install_hint() -> str:
         "",
         "  playit.gg (рекомендуется для себя — ПОСТОЯННЫЙ бесплатный адрес):",
         "    1. Скачай агент:  https://playit.gg/download   (Windows: playit-windows-*.exe)",
-        "    2. Нажми 🌐 в EDIT ещё раз — агент напечатает claim-ссылку",
+        "    2. Нажми 🌐 в LUMEN ещё раз — агент напечатает claim-ссылку",
         "       https://playit.gg/claim/XXXX — открой её и привяжи агент к аккаунту",
         "    3. В панели playit.gg: Add Tunnel → Protocol TCP → Local 127.0.0.1 → Port 8001",
         "    4. Готово: твой постоянный адрес вида  xxx.at.ply.gg:12345",
@@ -207,7 +207,7 @@ def install_hint() -> str:
         "    см. полную инструкцию — в readme.md, раздел Internet Access, вариант D,",
         "    или: «tunnel_engine»: «portmap» в config/api_keys.json после настройки.",
         "",
-        "После установки перезапусти EDIT — кнопка 🌐 заработает.",
+        "После установки перезапусти LUMEN — кнопка 🌐 заработает.",
     ]
     return "\n".join(lines)
 
@@ -430,3 +430,4 @@ class TunnelManager:
                 f.truncate()
         except Exception:
             pass
+

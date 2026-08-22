@@ -2,3 +2,16 @@
 # A portmap.io .ovpn profile contains a private key + client certificate.
 config/*.ovpn
 *.ovpn
+
+# LUMEN runtime data (memory, sessions, learning, logs) — local only
+lumen_data/
+
+# LUMEN config contains API keys — generated on first run, local only
+config/lumen.json
+config/lumen.json.tmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+

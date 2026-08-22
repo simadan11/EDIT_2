@@ -1,6 +1,6 @@
-# actions/self_improve.py — Autonomous Self-Improvement, Custom Skills & Command Execution for EDIT
+# actions/self_improve.py — Autonomous Self-Improvement, Custom Skills & Command Execution for LUMEN
 """
-Provides EDIT with:
+Provides LUMEN with:
 1. create_skill: create and permanently register new Python tools/skills ('делать навыки навеки')
 2. self_improve: edit codebase, redesign UI ('переделывать интерфейс'), add features ('добавлять функции возможности')
 3. execute_command: run arbitrary system/bash commands or Python code ('полностью что я захочу')
@@ -54,7 +54,7 @@ def run_skill(args, player=None):
     coin = args.get("coin", "bitcoin").lower().strip()
     try:
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin}&vs_currencies=usd"
-        req = urllib.request.Request(url, headers={"User-Agent": "EDIT-AI/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "LUMEN-AI/1.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode())
             if coin in data and "usd" in data[coin]:
@@ -352,11 +352,11 @@ def self_improve(parameters: dict, player=None, speak=None) -> str:
                         ui_file.write_text(new_content, encoding="utf-8")
 
             if player:
-                player.write_log(f"SYS: EDIT UI redesigned — {description}")
+                player.write_log(f"SYS: LUMEN UI redesigned — {description}")
                 # Refresh UI name/color if player supports it
                 try:
                     if hasattr(player, "_apply_name_update"):
-                        asst_name = cfg.get("assistant_name", "EDIT")
+                        asst_name = cfg.get("assistant_name", "LUMEN")
                         player._apply_name_update(asst_name, "", cfg.get("ui_color", ""))
                 except Exception:
                     pass
@@ -398,7 +398,7 @@ def self_improve(parameters: dict, player=None, speak=None) -> str:
 
 def execute_command(parameters: dict, player=None, speak=None) -> str:
     """
-    Execute arbitrary system/bash command or Python code so EDIT can do anything the user wants.
+    Execute arbitrary system/bash command or Python code so LUMEN can do anything the user wants.
     """
     cmd = parameters.get("command", "").strip()
     mode = parameters.get("mode", "bash").lower().strip()
@@ -457,3 +457,4 @@ def execute_command(parameters: dict, player=None, speak=None) -> str:
         return f"Command timed out after {timeout} seconds."
     except Exception as e:
         return f"Error executing command: {e}"
+

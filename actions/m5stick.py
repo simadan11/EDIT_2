@@ -701,7 +701,7 @@ if __name__ == "__main__":
     # Show welcome screen
     time.sleep(1)
     ctrl.display_clear()
-    ctrl.display_title("MARK L", "M5Stick Connected")
+    ctrl.display_title("LUMEN", "M5Stick Connected")
     ctrl.led_color("cyan", 50)
 
     print("\nListening for events (Ctrl+C to quit)...")
@@ -715,3 +715,4 @@ if __name__ == "__main__":
         ctrl.display_text("Goodbye!", 20, 50)
         time.sleep(1)
         ctrl.disconnect()
+

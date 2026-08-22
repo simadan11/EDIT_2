@@ -1,0 +1,428 @@
+# ⚙️ MARK L (50)
+### The Ultimate Cross-Platform Personal AI Assistant — By FatihMakes
+
+> 📺 **[Watch the full setup video on YouTube](https://www.youtube.com/@FatihMakes)**
+
+A real-time voice AI that can hear, see, understand, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
+
+---
+
+## ✨ Overview
+
+MARK L is where the assistant stops being a tool and starts being a presence. It remembers yesterday's conversation, watches the topics you care about, and speaks first when it has something worth saying. The goal of this build was continuity — JARVIS should feel like it never fully left, even after you close it.
+
+It's not just an assistant — it's an extension of your digital life.
+
+---
+
+## 🚀 Capabilities
+
+### Core Features
+| Feature | Description |
+|---|---|
+| 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
+| 🖥️ System Control | Launch apps, adjust volume/brightness, WiFi, shortcuts, power — all by voice |
+| 🧩 Autonomous Tasks | High-level planning for complex multi-step goals via agent mode |
+| 👁️ Visual Awareness | Real-time screen capture and webcam vision piped into your main Gemini session |
+| 🧠 Persistent Memory | Deeply remembers projects, preferences, and personal context across sessions |
+| ⌨️ Hybrid Input | Seamlessly switch between keyboard typing and voice commands |
+| 🌅 Morning Briefing | On first boot: greets you, reads the time, recaps yesterday, and fetches live news |
+| 🔔 Proactive 2.0 | Time-aware, context-aware check-ins — knows the time of day, your projects, and what you've been discussing |
+| 🗓️ Session Memory | Summarises each conversation and mentions it naturally next morning — consumed after use, never repeats |
+| 👁️‍🗨️ Background Monitoring | User-configured topic watching — checks for new headlines once a day and alerts naturally |
+| 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts |
+| 🌤️ Weather Report | Live weather data for your city, personalized from memory |
+| 🗺️ Dynamic Content Panel | Scrollable display layer beneath the HUD that renders web results, news, and search data |
+| 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — Gemini Grounded first, DDG fallback |
+| ⏰ Smart Reminders | OS-native scheduled notifications (Windows Task Scheduler / macOS LaunchAgent / Linux systemd) |
+| ✈️ Flight Finder | Live flight price and availability lookup |
+| 🎮 Game Updater | Checks and triggers game updates on Steam and Epic Games on demand |
+| 📂 File Processor | Read, summarize, and answer questions about local files |
+| 💻 Code Helper | Inline code review, debugging, and generation |
+| 🌐 Browser Control | Open URLs, navigate tabs, and interact with the browser by voice |
+| 📨 Send Message | Compose and send messages through WhatsApp, Telegram, and more |
+| 🎬 YouTube Control | Search, play, and control YouTube playback by voice |
+| 🖱️ Desktop Control | Taskbar, window management, and desktop-level operations |
+| 🧑‍💻 Silent Language Memory | Detects spoken language on first use — all future sessions adapt automatically |
+| 📱 Remote Dashboard | Control the assistant from your phone via QR code pairing |
+| 🎧 Headphones Mode | Bluetooth headphones paired to the phone or the PC become a hands-free channel: LUMEN speaks through them, hears you via the headset mic, and the headphone's own button is push-to-listen |
+| 📷 Phone Camera Vision | LUMEN-style scan from the phone camera — labels people, cars & plates on a live HUD, JARVIS answers by voice on PC **and** phone |
+| ◈ Holo Lab | Create any hologram/blueprint, assemble a buy/make BOM, run diagnostics and print a build report — smart glasses, robot, vehicle, building, planet or custom geometry |
+| 🏋️ Personal Trainer | Workout & nutrition plan (persistent), workout/weight/sleep logging, progress stats with streaks, sleep analysis with score, daily motivational push at your time — data stays local (`~/.jarvis/personal_trainer.json`) |
+| ⚡ Auto-Start on Boot | Registers with the OS startup system (registry / LaunchAgent / .desktop) |
+| 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
+| 🎨 Assistant Customization | Change the assistant name and your name from the UI — takes effect immediately |
+
+---
+
+## 🎙 Voice — смена и тонкая настройка голоса
+
+В панели **⚙️ → CUSTOMISE ASSISTANT** теперь можно выбрать голоса:
+
+- **LIVE VOICE** — основной голос ассистента (Gemini Live): `Puck`, `Charon`,
+  `Kore`, `Fenrir`, `Aoede`. Применяется к новой сессии (перезапуск LUMEN).
+  Конфиг: `"voice_name": "Puck"`.
+- **JARVIS VOICE** — голос модуля озвучки (EdgeTTS, наушники/PC-режим):
+  `ru-RU-DmitryNeural` (по умолчанию), `ru-RU-SvetlanaNeural`,
+  `en-GB-RyanNeural`… любой валидный EdgeTTS id. Конфиг: `"tts_jarvis_voice"`.
+
+Чёткость нейроголоса EdgeTTS (модуль озвучки), в `config/api_keys.json`:
+
+```json
+"tts_jarvis_rate": "-5%",      // скорость: чуть медленнее = разборчивее
+"tts_jarvis_pitch": "+0Hz",    // тон, напр. "+5Hz" выше
+"tts_jarvis_volume": "+0%"     // громкость
+```
+
+Тот же тюнинг для голоса на PC-колонках — общие ключи `tts_rate`,
+`tts_pitch`, `tts_volume`. Весь поток телефонной озвучки дополнительно
+проходит пиковую нормализацию — одинаковая громкость каждой реплики.
+
+## 🌐 Internet Access — use LUMEN from anywhere over mobile data (no WiFi)
+
+When you leave home there is no WiFi, so the local address `192.168.x.x:8000` is unreachable. LUMEN can open a **public tunnel** (playit.gg / Cloudflare quick tunnel / ngrok) that gives you an internet URL — open it on your phone over **mobile data** and the same Remote Dashboard works: headphones mode 🎧, voice channel, LUMEN camera.
+
+### Вариант A — playit.gg (личное постоянное приложение, бесплатный ФИКСИРОВАННЫЙ адрес)
+
+playit.gg — туннель без port-forwarding и без своего домена; адрес вида
+`xxx.at.ply.gg:12345` **не меняется**, пока жив туннель в панели playit.
+
+1. Скачайте агент: https://playit.gg/download (Windows: `playit-windows-*.exe`,
+   положите в `Downloads` — LUMEN найдёт его сам).
+2. В LUMEN нажмите **🌐 INTERNET ACCESS** (⚙️). Первый запуск покажет
+   claim-ссылку `https://playit.gg/claim/…` — откройте её, войдите на
+   playit.gg, нажмите **Claim agent**.
+3. В панели playit.gg: **Add Tunnel → Protocol: TCP → Local IP: 127.0.0.1 →
+   Port: 8001** (`8001` — наш HTTPS-алиас дашборда).
+4. Нажмите **🌐** ещё раз — LUMEN покажет адрес `https://xxx.at.ply.gg:12345`.
+5. На телефоне (4G): открыть адрес → один раз принять самоподписанный
+   сертификат → ввести PIN из Remote Control → **«Добавить на главный экран»**
+   — это и есть личное приложение (вход дальше автоматический по device-token).
+6. Автостарт: `"internet_tunnel": true` в `config/api_keys.json`.
+
+Force engine: `"tunnel_engine": "playit" | "cloudflared" | "ngrok" | "auto"`.
+
+> 📦 Хотите настоящую иконку-приложение без магазина? Соберите TWA-APK по
+> гайду **`play-store/README.md`** — для личного пользования Google Play не
+> нужен, ставите `app-release-signed.apk` напрямую на телефон.
+
+### Вариант B — Cloudflare quick tunnel / ngrok (URL на один раз)
+
+1. Install a tunnel engine on the PC (one time):
+   - Cloudflare (free, no account):
+     - Windows: `winget install cloudflare.cloudflared` (or download `cloudflared.exe` from the releases page),
+     - macOS: `brew install cloudflared`,
+     - Linux: `sudo apt install cloudflared`.
+   - or ngrok: https://ngrok.com/download
+2. In LUMEN press **🌐 INTERNET ACCESS** in the settings drawer (⚙️), or say *«включи интернет доступ»* / *«internet access on»*.
+3. LUMEN shows the internet URL (e.g. `https://xxxx.trycloudflare.com`) on the content panel and in the log.
+4. Open that URL on the phone — even on mobile data, away from home. A phone that already paired at home (device token) enters automatically; a new phone needs the PIN from Remote Control.
+
+To turn it off: press **🌐** again or say *«выключи интернет доступ»*. The mode can auto-start with LUMEN (`internet_tunnel: true` in `config/api_keys.json`).
+
+> 🔒 Quick-tunnel URL is random on every start. For a **permanent** address use playit.gg (above) or a free Cloudflare account + named tunnel, and put the stable URL in `config/api_keys.json` → `tunnel_static_url` (полный автомат: `cloudflare/setup-remote-control.ps1`). Auth still applies (PIN / paired device token), and API/WS traffic is never cached by the service worker.
+> 📶 Voice over mobile data works but latency is higher than on LAN — fine for commands, slightly delayed for back-and-forth conversation.
+
+### Вариант D — portmap.io + OpenVPN (ваша постоянная точка входа)
+
+portmap.io даёт постоянный адрес вида `tcp://ваше-имя.portmap.host:37061`;
+туннель держит обычный клиент **OpenVPN** с их профилем.
+
+1. https://portmap.io → регистрация → **Create new configuration** →
+   Protocol: **TCP**, Local IP `127.0.0.1`, Local port **8001** → Create.
+   ⚠️ Если туннель уже создан с другим локальным портом (напр. `7777`) —
+   откройте его на **Edit** в кабинете portmap и поменяйте Local port на
+   **8001**, иначе внешний адрес будет смотреть в пустоту.
+2. В разделе конфигурации скачайте **.ovpn-профиль** → положите его в
+   `config\portmap.ovpn`.
+   🔒 Профиль содержит приватный ключ — он в `.gitignore`, в git не попадёт,
+   никому не отправляйте.
+3. Установите OpenVPN: https://openvpn.net/community-downloads/
+   (Windows Installer; нужен админ — ставится TAP-адаптер).
+4. В `config/api_keys.json` (уже выставлено для адреса Danz…):
+   `"tunnel_engine": "portmap"`,
+   `"tunnel_static_url": "https://ваше-имя.portmap.host:37061"`.
+5. Запустите LUMEN → ⚙️ → **🌐 INTERNET ACCESS** → статус ON.
+6. Телефон (4G): открыть адрес → 1 раз принять самоподписанный сертификат →
+   PIN → «Добавить на главный экран».
+
+> Если браузер пишет SSL-ошибку вместо «принять риск» — в п.1 маппинг сделан
+> на порт 8000: тогда открывайте через `http://…` (и поменяйте схему в
+> `tunnel_static_url`). Для 8001 (`https://`) — как написано выше.
+> Бесплатный portmap имеет тайм-ауты по неактивности — процесс OpenVPN сам
+> переподключится; при долгом простое телефон просто обновляет страницу.
+
+### Вариант C — Mesh-VPN (Tailscale / ZeroTier) — самый приватный
+
+Телефон и ПК входят в **одну виртуальную сеть**: ПК получает постоянный IP
+вида `100.x.x.x`, телефон открывает `http://100.x.x.x:8000` как будто вы дома
+— без каких-либо публичных URL вообще. Трафик шифрован (WireGuard), сторонние
+серверы нужны только для «сведения» пиров, бесплатно (личный тариф).
+
+1. Заведите аккаунт https://tailscale.com (вход через Google/GitHub — 1 мин).
+2. Поставьте Tailscale **на ПК** и **на телефон** (приложение из магазина) и
+   войдите в оба под одним аккаунтом.
+3. В админке tailscale посмотрите IP ПК (`100.…`) или включите MagicDNS —
+   тогда адрес вида `http://имя-пк.ваша-сеть.ts.net:8000`.
+4. На телефоне: включить Tailscale → открыть `http://100.x.x.x:8000` → PIN →
+   «Добавить на главный экран». Готово: работает на мобильном интернете,
+   туннелей и доменов вообще нет, максимум приватности.
+
+> **Чистый OpenVPN** (если принципиально): нужен сервер — либо дома с пробросом
+> `1194/udp` на роутере (тогда Playit не нужен, но нужен доступ к роутеру и
+> белый/DDNS-адрес), либо VPS в облаке за деньги, на котором поднят
+> OpenVPN-сервер; телефон подключается приложением *OpenVPN Connect* и дальше
+> всё как в варианте C (`http://10.8.0.1:8000`). Смысла нет: то же самое даёт
+> Tailscale бесплатно и без проброса портов.
+
+---
+
+## 🤖 Publish LUMEN Remote as a native Android app (Google Play)
+
+The dashboard is PWA-ready, so it can be shipped to Google Play as a real app
+via **Trusted Web Activity (Bubblewrap)** — fullscreen, own icon, AAB bundle.
+Digital Asset Links are served by the dashboard itself
+(`/.well-known/assetlinks.json`). Full step-by-step guide:
+**[play-store/README.md](play-store/README.md)** — Bubblewrap build, SHA-256
+fingerprints, Play Console checklist.
+
+## 📲 Install LUMEN on your phone as an app (PWA)
+
+The Remote Dashboard is an installable web app (PWA) — you get an icon on the home screen, a full-screen window and a faster start, so the assistant feels like a real app on the phone.
+
+**Android (Chrome):**
+1. Open the Remote Dashboard on the phone (pair via **Remote Control** QR first — the pairing is remembered automatically after the first scan).
+2. Tap the **⤓** button in the header (it appears when the app is installable), or open the browser menu **⋮ → «Добавить на главный экран» / «Установить приложение»**.
+3. Confirm — an **LUMEN** icon appears on the home screen. Tap it to launch the dashboard in its own full-screen window. First launch may ask to re-pair if the app data was cleared; normally it reconnects automatically via the remembered device token.
+
+**iPhone / iPad (Safari):**
+1. Open the dashboard, then tap **Share (⤴) → «На экран „Домой"»**.
+2. Add — an LUMEN icon appears on the home screen. (iOS runs the dashboard in a standalone Safari window.)
+
+Notes: the installed app keeps working as the remote: headphones mode (🎧), voice channel, LUMEN camera, Holo Lab. It also holds the screen wake lock during headphones mode, so the display stays on. The app needs the PC to be running — it is a remote control, not a standalone server.
+
+---
+
+## 📷 Phone Camera Vision — LUMEN Mode
+
+The Remote Dashboard now turns your phone into JARVIS's eyes, Spider-Man style:
+
+1. On your PC, press **Remote Control** and pair your phone with the QR code.
+2. Tap **📷** in the dashboard footer — a full-screen tactical HUD opens with your live camera feed (corner brackets, scanline, back/front camera toggle).
+3. Tap **SCAN** (optionally type a question like *"who is in the room?"* or *"what is on my desk?"*):
+   - **HUD detection** — the server scans the frame and your phone draws labeled boxes over the live video: **people in orange** (`PERSON — RED JACKET, GLASSES`), **vehicles in yellow** (`CAR — WHITE BMW X5`, `PLATE — A123BC` when the plate text is legible), **objects in cyan** (`LAPTOP`, `CAR KEYS`, famous landmarks & products by their real names).
+   - **PC overlay** — the same labeled snapshot pops onto the PC window's HUD area for ~20 s, so you see on the big screen exactly what the phone saw.
+   - **LIVE stream** — the **LIVE** toggle (~3 fps) streams the phone camera onto the PC main window in real time; a background detection pass repaints **person / vehicle / animal / object** boxes every ~1.5 s on *both* the PC window and the phone HUD. Tap **⏹** to stop.
+   - **Tap for info** — tap any object/vehicle/landmark tag on the phone and JARVIS looks it up and explains what it is (people and plates are intentionally not searchable).
+   - **Voice answer** — the same frame is injected into the main Gemini Live session, so JARVIS speaks a concise tactical report out loud — both on the PC **and on the phone's speaker** (🔊 toggle in the dashboard header), with the transcript in the feed and on the HUD.
+
+### 🛰 Devices Hub — every remote under control
+- **On the PC** — open **Remote Control**; the overlay now lists every connected phone (device type, IP, session time) with a **KICK** button per device and **REVOKE PAIRED DEVICES**.
+- **On the phone** — the 🛰 chip in the header shows the live remote count and opens the same hub: see who is connected, kick a device, or revoke all saved pairings.
+
+> 🔊 **Voice notes:** JARVIS speaks on PC and phone simultaneously; if both are in the same room and you hear an echo, tap 🔇 on the phone or use headphones. While JARVIS's voice plays on the phone speaker, the phone mic is briefly suppressed so JARVIS never hears himself (that echo is what used to interrupt answers).
+
+> ⚠️ **Privacy by design:** people are described by appearance/clothing/pose only — the AI never identifies real people and never looks anyone up. License plates are transcribed as visible text only; there is intentionally **no owner lookup**. Camera access on `http://` origins needs the same one-time Chrome flag as the microphone (the app shows setup instructions automatically on first tap).
+
+## ◈ Holo Lab — wearable / smart-glasses prototype
+
+Open **◈ HOLO** in the Remote Dashboard — or open **◈ HOLO LAB / PC MONITOR** in the desktop settings drawer — to get a software holographic workbench inspired by sci-fi HUDs:
+
+1. Choose **Smart Optics** (glasses + camera), **AR Glove**, **Field Suit**, or **Custom / any object or scene**.
+2. For a custom design, type a subject such as *robot*, *car*, *house*, *spaceship*, *room*, *planet* or anything else. Press **ASK JARVIS TO DESIGN ANYTHING** and the AI generates the component schedule plus safe geometry primitives automatically.
+3. Press **CREATE HOLOGRAM** for an immediate visual prototype. The server returns a session project ID such as `HOLO-A1B2C3` and mirrors the blueprint to the PC monitor.
+4. Inspect the animated concept in **HOLO**, **WIREFRAME**, **EXPLODED**, or **CLEAR VIEW** mode. The PC renderer draws boxes, cylinders, spheres, rings, lines and other blueprint primitives into the hologram.
+5. On the PC, the overlay draws the AI blueprint, subject, component schedule, geometry and animated hologram directly in the desktop window.
+6. Start the camera feed and press **SCAN SPACE** to reuse the LUMEN detector on the test feed. **ASK JARVIS ABOUT VIEW** sends one selected frame to the existing vision session for a spoken explanation.
+7. In the PC Holo Lab, open **PARTS CATALOG / BUILD** to select a BOM from a broad offline catalog of parts that can be bought or made: controllers, cameras, displays, optics, batteries, chargers, regulators, sensors, 3-D printed enclosures, PCB parts, test instruments and safety equipment.
+8. Open **ASSEMBLY EDITOR / PLACE PARTS** to add BOM parts into the scene, drag them in the viewport like a simple Blender assembly view, edit X/Y/Z, rotation and scale, snap to a grid, remove parts, and save/load the project as JSON.
+9. Press **RUN DIAGNOSTICS / HELP** when something fails. It checks missing controller/power/protection/display/camera/thermal/test parts and gives a problem, fix and next bench test. You can also say *"камера не работает"*, *"экран чёрный"*, *"батарея греется"* or *"почему перезагружается"*.
+10. Press **PRINT BLUEPRINT** to open the system printer dialog and print the blueprint, AI component schedule, buy/make BOM and diagnostics. You can also say *"распечатай схему голограммы"*.
+11. You can also say or type *"создай полностью любую голограмму автомобиля и покажи чертёж по частям"*. The `holo_project` tool generates the subject, component list, geometry and suggested parts, opens the PC Holo Lab automatically and mirrors the project to connected dashboards.
+
+This is an honest software prototype: it renders a hologram-style visualization on a phone/PC screen and can use a camera, but it cannot create a physical free-space hologram or switch on hardware by itself. Before building any real wearable, validate optics, heat, battery safety, fit, privacy and local regulations.
+
+---
+
+## 🎧 Headphones Mode — talk to LUMEN through Bluetooth headphones
+
+The headphones can be paired either to the **phone** (Remote Dashboard) or to the **PC** — LUMEN supports both.
+
+### 🗣️ Wake Bracket Protocol — «LUMEN … команда … LUMEN» (default ON)
+
+By default LUMEN answers **only** voice commands framed between two standalone **«LUMEN»** words:
+
+1. Say **«LUMEN»** (произносится «люмен») — LUMEN starts paying attention but stays silent.
+2. Say your command: «LUMEN, включи музыку, LUMEN».
+3. Say **«LUMEN»** again — LUMEN answers exactly what was said between the two words.
+
+LUMEN hears everything, but outside the frame it stays completely silent (no reaction to a single name, noise, or unframed questions). The wake word must be a standalone word — «отредактируй», «редактировать», «editable» etc. do **not** trigger it. While LUMEN is speaking you can interrupt by saying «LUMEN» — it stops and listens.
+
+The protocol is saved in `config/api_keys.json` as `wake_bracket` (default `true`) and can be switched off by voice: *«выключи режим LUMEN в начале и в конце»* (then LUMEN responds to everything) or back on with *«включи wake protocol»*.
+
+### 🗣️ Voice: PC speaks as always, phone headphones use the Jarvis Voice Module
+
+- **On the PC — the voice is as always:** the AI's own audio plays through the PC speakers (default). No TTS module involved.
+- **Phone headphones mode — improved Jarvis Voice Module:** the AI's audio is discarded and the reply text is voiced by a dedicated module with a **Jarvis-quality Russian voice** — deep male neural voice **ru-RU-DmitryNeural** (EdgeTTS), synthesised on the PC and streamed as PCM to the phone's single sink tab (= your headphones). Exactly one voice, never two; no robotic phone TTS. The replies are generated in Russian anyway, so the Russian voice matches.
+  - Fallback: if `edge-tts`/`miniaudio` are not installed, the phone's own `speechSynthesis` is used instead.
+  - The headphone button / saying «LUMEN» stops the Jarvis voice instantly.
+
+Configuration (`config/api_keys.json`): `tts_jarvis_voice` (default `ru-RU-DmitryNeural` — pick any EdgeTTS voice, e.g. `ru-RU-SvetlanaNeural` female, `en-GB-RyanNeural` for English Jarvis). The optional PC TTS mode (`tts_voice_mode`, default `false`) is toggled by voice: *«включи TTS модуль»* / *«пусть ИИ говорит как всегда»*.
+
+### 📱 Headphones connected to the phone (main scenario)
+
+1. Open the **Remote Dashboard** on your phone (pair via **Remote Control** QR) and tap the **🎧** chip in the header.
+2. LUMEN asks for microphone access once (that is the headset mic). The mode is now ON — the chip lights up.
+3. Press the **button on your Bluetooth headphones** — LUMEN instantly stops talking and listens to you through the headset:
+   - the press is caught by the phone (browser media session → `/api/headphones/button`);
+   - the phone streams its microphone (the headset mic) to the PC, so LUMEN hears you;
+   - LUMEN's reply is voiced by the **Jarvis Voice Module** (deep Russian male neural voice, ru-RU-DmitryNeural) straight into your headphones.
+
+Notes:
+
+- **No double voice, guaranteed:** while the phone's 🎧 mode is ON the AI's audio is not used at all (Gemini returns text only), the PC speaker is muted automatically, and the phone tab that runs the mode is the single audio sink — no other tab/device voices the reply. Even with the dashboard open in two tabs you hear exactly one voice. The mode is restored after a page reload.
+- **Screen stays on:** while the mode is ON (or the phone mic is streaming) the phone requests a **screen wake lock**, so the display never goes black and the browser never suspends the sound/mic. When the app returns to the foreground, the lock and audio contexts are resumed automatically. (Requires HTTPS — the dashboard already runs over HTTPS.)
+- Works best in **Chrome on Android** (`navigator.mediaSession`). If the phone is also playing music in another app, the button controls that app instead — pause it first.
+- **Works with Gelius and any other Bluetooth earbuds/headset** — they all send the standard AVRCP play/pause command on the multifunction button (on Gelius TWS earbuds it's a **single tap** on the earbud). LUMEN listens to all of the play/pause/next/prev actions, so any of them triggers push-to-listen.
+- While the mode is ON the tab keeps a silent media session so the button reaches LUMEN, and the headset-mic channel is open (tap 🎤 to stop it manually, 🎧 again to turn the mode off).
+
+### 🖥️ Headphones connected to the PC
+
+- Press **🎧 HEADPHONES MODE** in the settings drawer (⚙️), or say *"включи режим наушников"* / *"headphones mode on"*.
+
+| What | What happens |
+|---|---|
+| 🎧 Output | LUMEN's voice plays through the headphones (A2DP/stereo endpoint) instead of the PC speakers |
+| 🎤 Input | LUMEN hears you through the headset microphone (Hands-Free endpoint; falls back to the default PC mic if the headset has none) |
+| 🔘 Headphone button | The multifunction button on the headphones (AVRCP play/pause) becomes **push-to-listen** — tap it while LUMEN is talking and LUMEN instantly stops and listens to you through the headset |
+
+PC-side details:
+
+- **Auto-switch** — the mode re-checks Bluetooth every ~10 s: connect your headset later and LUMEN switches over automatically; unplug it and the audio falls back to the default devices.
+- **Remembered** — the mode is saved to `config/api_keys.json` (`headphones_mode`) and restored on the next start.
+- **Voice control** — the `headphones_mode` tool answers *"наушники"*, *"режим наушников"*, *"bluetooth headphones"*, *"говори через наушники"*, etc.
+- **Button capture** — Windows-only, requires `pip install keyboard` (already in `requirements.txt`). Without it the mode still reroutes the audio; only the headphone-button trigger is unavailable.
+
+---
+
+## 🆕 What's New in Mark L
+
+### 🗓️ Session Memory — JARVIS Remembers Yesterday
+At the end of every session, JARVIS generates a 1-2 sentence summary of what was discussed and saves it to memory. The next morning, it's mentioned naturally in the briefing:
+> *"Good morning, sir — it's 09:15. Yesterday you were working on the Mark L background monitoring feature. Fetching today's headlines now."*
+
+The summary is consumed immediately after use — it never repeats in future briefings and adds zero long-term bloat to memory.
+
+### 👁️‍🗨️ Background Monitoring — JARVIS Watches While You're Away
+Tell JARVIS to monitor any topic and it checks for new developments once a day using DuckDuckGo news. When a headline changes, it reports back naturally in your language:
+> *"Efendim, takip ettiğiniz yapay zeka haberlerinde bir gelişme var: Google yeni bir model duyurdu."*
+
+Fully opt-in — JARVIS monitors nothing without being explicitly asked. Crypto, financial, and trading topics are blocked at the code level regardless of what is requested. Same headline never triggers twice.
+
+### 🔔 Proactive System 2.0 — Context-Aware, Time-Aware, Non-Repetitive
+The proactive engine was rebuilt from the ground up. Instead of a generic check-in after 15 minutes of silence, JARVIS now:
+- Knows the **time of day** — morning tone differs from evening tone
+- Knows your **active projects** from memory and can ask how something is going
+- Knows your **monitored topics** and can bring one up naturally
+- Knows **what you were just talking about** (last 8 conversation turns)
+- **Rotates** between three focus areas so it never opens with the same line twice
+- Has a 20-minute cooldown (up from 10) — less intrusive, more meaningful
+
+### 👁️ Instant Vision Acknowledgment — No More Silent Waiting
+When you ask JARVIS to look at your screen or camera, it no longer goes silent while processing. It immediately says something natural ("Looking at your screen now, sir" / "Ekrana bakıyorum efendim") while the capture runs. The actual analysis follows as the next response.
+
+### 📰 Parallel News Search — First Result Wins
+News queries now run Gemini Grounded Search and DuckDuckGo news simultaneously in two threads. Whichever delivers a valid result first is used; the other is silently discarded. A Gemini 503 error no longer delays results — the DDG fallback is already running in parallel.
+
+---
+
+## 🗺️ Mark Roadmap
+
+| Mark | Focus |
+|---|---|
+| **XLVIII** | Instant interrupt · parallel news · two-phase briefing · exponential backoff · vision cooldown |
+| **XLIX** | Auto-start · clipboard intelligence · assistant customization |
+| **L** | Session memory · background monitoring · proactive 2.0 · instant vision · parallel news search |
+| **LI+** | Plugin system · email · quiz mode · calorie counter · calendar |
+
+---
+
+## ⚡ Quick Start
+
+```bash
+git clone https://github.com/FatihMakes/Mark-L.git
+cd Mark-L
+pip install -r requirements.txt
+python main.py
+```
+
+> ⚠️ **Installation Note:** Some OS-specific dependencies are not bundled in `requirements.txt` to keep the repo lightweight. If you hit a `ModuleNotFoundError`, install the missing package with `pip install <module_name>`.
+
+---
+
+## 📋 Requirements
+
+| Requirement | Details |
+| --- | --- |
+| **OS** | Windows 10/11, macOS, or Linux |
+| **Python** | 3.11 or 3.12 |
+| **Microphone** | Required for voice interaction |
+| **API Key** | Free Gemini API key (`config/api_keys.json`) |
+
+---
+
+## 🗂️ Project Structure
+
+```
+Mark L/
+├── main.py                   # Core loop — Gemini Live session, audio I/O, tool dispatch
+├── ui.py                     # PyQt6 HUD — waveform, log panel, interrupt button, camera feed
+├── setup.py                  # First-run configuration wizard
+├── actions/
+│   ├── web_search.py         # Gemini + DDG parallel search (news, research, price, compare)
+│   ├── screen_processor.py   # Screen capture & webcam vision via Gemini Live
+│   ├── background_monitor.py # User-configured topic watching — daily DDG check, no crypto
+│   ├── proactive.py          # Proactive 2.0 — time/context/rotation-aware check-ins
+│   ├── reminder.py           # OS-native scheduled notifications
+│   ├── system_monitor.py     # CPU / RAM / GPU / temperature telemetry
+│   ├── computer_settings.py  # Volume, brightness, WiFi, power
+│   ├── computer_control.py   # Keyboard shortcuts, mouse, window management
+│   ├── open_app.py           # Application launcher
+│   ├── browser_control.py    # Web browser control
+│   ├── file_controller.py    # File system operations
+│   ├── file_processor.py     # Document reading and summarization
+│   ├── send_message.py       # Messaging integration
+│   ├── weather_report.py     # Live weather data
+│   ├── flight_finder.py      # Flight search
+│   ├── youtube_video.py      # YouTube playback control
+│   ├── game_updater.py       # Game update management (Steam / Epic)
+│   ├── code_helper.py        # Code review and generation
+│   ├── dev_agent.py          # Developer task agent
+│   └── desktop.py            # Desktop and taskbar control
+├── memory/
+│   ├── memory_manager.py     # Load/save long_term.json — sessions, monitors, identity
+│   └── long_term.json        # Persistent store: identity, preferences, projects, sessions, monitors
+├── core/
+│   └── prompt.txt            # Assistant personality and tool-routing rules
+└── config/
+    └── api_keys.json         # API key, OS setting, assistant name, user name
+```
+
+---
+
+## ⚠️ License
+
+Personal and non-commercial use only.
+Licensed under **[Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**.
+
+---
+
+## 👤 Connect with the Creator
+
+Engineered by a developer building a real-world JARVIS-style assistant.
+⭐ **Star the repository to support the journey to Mark 100.**
+
+| Platform | Link |
+| --- | --- |
+| YouTube | [@FatihMakes](https://www.youtube.com/@FatihMakes) |
+| Instagram | [@fatihmakes](https://www.instagram.com/fatihmakes) |

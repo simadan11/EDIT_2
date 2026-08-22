@@ -1,40 +1,40 @@
 <#
 ═══════════════════════════════════════════════════════════════════════════
- EDIT — Remote Control "под ключ" за одну команду (Windows 10/11)
+ LUMEN — Remote Control "под ключ" за одну команду (Windows 10/11)
 
  Что скрипт делает сам:
    1. Ставит cloudflared (если нет)                → winget
-   2. Логин в Cloudflare (ОДИН клик в браузере: выбрать зону edit.com)
-   3. Создаёт именной туннель  edit-remote
-   4. Пишет config.yml (ingress → http://localhost:8000 — дашборд EDIT)
-   5. Создаёт DNS-запись  remote.edit.com → туннель
+   2. Логин в Cloudflare (ОДИН клик в браузере: выбрать зону lumen.com)
+   3. Создаёт именной туннель  lumen-remote
+   4. Пишет config.yml (ingress → http://localhost:8090 — платформа LUMEN)
+   5. Создаёт DNS-запись  remote.lumen.com → туннель
    6. Регистрирует туннель как службу Windows (автозапуск с ПК)
-   7. Прописывает в EDIT:  internet_tunnel + tunnel_static_url
+   7. Прописывает в LUMEN:  internet_tunnel + tunnel_static_url
    8. (-NoWorker отключает) Устанавливает Wrangler, деплоит Workers-фасад
-      со случайным SECRET и подставляет workers.dev URL в конфиг EDIT
+      со случайным SECRET и подставляет workers.dev URL в конфиг LUMEN
 
  Запуск (PowerShell из папки репозитория):
    powershell -ExecutionPolicy Bypass -File cloudflare\setup-remote-control.ps1
 
  Параметры:
-   -Domain edit.com        # ваш домен на Cloudflare DNS
+   -Domain lumen.com        # ваш домен на Cloudflare DNS
    -Sub remote             # поддомен панели (→ remote.<Domain>)
-   -TunnelName edit-remote # имя туннеля
+   -TunnelName lumen-remote # имя туннеля
    -NoWorker               # только туннель, без Workers-фасада
    -SkipService            # не ставить службу Windows
 
  Ручные действия (неизбежны — логиниться в ваш аккаунт за вас нельзя):
    • 1 клик в браузере на шаге cloudflared login (выбрать домен)
    • 1 клик в браузере на шаге wrangler login (только Workers)
-   • если edit.com ещё не привязан к Cloudflare: добавить сайт в панели
+   • если lumen.com ещё не привязан к Cloudflare: добавить сайт в панели
      Cloudflare и сменить NS у регистратора — скрипт об этом напомнит.
 ═══════════════════════════════════════════════════════════════════════════
 #>
 [CmdletBinding()]
 param(
-    [string]$Domain     = "edit.com",
+    [string]$Domain     = "lumen.com",
     [string]$Sub        = "remote",
-    [string]$TunnelName = "edit-remote",
+    [string]$TunnelName = "lumen-remote",
     [switch]$NoWorker,
     [switch]$SkipService
 )
@@ -68,9 +68,9 @@ function _admin() {
         ).IsInRole([System.Security.Principal.WindowsBuiltinRole]::Administrator)
 }
 
-_say "EDIT Remote Control — автонастройка через Cloudflare"
+_say "LUMEN Remote Control — автонастройка через Cloudflare"
 Write-Host "  Адрес панели будет:  https://$Fqdn" -ForegroundColor White
-Write-Host "  Дашборд на ПК:       http://localhost:8000`n"
+Write-Host "  Дашборд на ПК:       http://localhost:8090`n"
 
 # ── 0. Повышение прав (служба требует администратора) ──────────────────────
 if (-not $SkipService -and -not (_admin)) {
@@ -138,14 +138,14 @@ if ($TunnelId) {
 }
 
 # ── 4. config.yml ──────────────────────────────────────────────────────────
-_say "4/8  Конфиг ingress → http://localhost:8000"
+_say "4/8  Конфиг ingress → http://localhost:8090"
 $cfgYml = @"
 tunnel: $TunnelId
 credentials-file: $CfHome\$TunnelId.json
 
 ingress:
   - hostname: $Fqdn
-    service: http://localhost:8000
+    service: http://localhost:8090
   - service: http_status:404
 "@
 New-Item -ItemType Directory -Force -Path $CfHome | Out-Null
@@ -191,7 +191,7 @@ logfile: $svcHome\cloudflared.log
 
 ingress:
   - hostname: $Fqdn
-    service: http://localhost:8000
+    service: http://localhost:8090
   - service: http_status:404
 "@
         Set-Content -Path (Join-Path $svcHome "config.yml") -Value $svcCfg -Encoding UTF8
@@ -216,8 +216,8 @@ ingress:
     _warn "Туннель вручную:  cloudflared tunnel run $TunnelName"
 }
 
-# ── 7. Прописать адрес в EDIT ──────────────────────────────────────────────
-_say "7/8  Конфиг EDIT (config\api_keys.json)"
+# ── 7. Прописать адрес в LUMEN ──────────────────────────────────────────────
+_say "7/8  Конфиг LUMEN (config\api_keys.json)"
 $panelUrl = "https://$Fqdn"
 
 # ── 8. Workers-фасад ───────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ if (-not $NoWorker) {
     }
 }
 
-# Записываем итоговый URL в конфиг EDIT (merge — остальные поля сохраняются)
+# Записываем итоговый URL в конфиг LUMEN (merge — остальные поля сохраняются)
 $ht = @{}
 if (Test-Path $ApiKeys) {
     try {
@@ -307,6 +307,7 @@ Write-Host @"
 
   Первый вход: введите PIN из панели Remote Control приложения (⚙️).
   Телефон запомнит device-token — дальше вход автоматический, хоть на 4G.
-  Автозапуск: туннель — службой Windows; EDIT запускает дашборд сам.
+  Автозапуск: туннель — службой Windows; LUMEN запускает дашборд сам.
 "@
 Read-Host "Нажмите Enter, чтобы закрыть окно"
+

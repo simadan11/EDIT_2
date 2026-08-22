@@ -1,6 +1,6 @@
 """
 BackgroundMonitor — user-configured topic watching.
-Checks DDG news once per day per topic; alerts JARVIS when a new headline appears.
+Checks DDG news once per day per topic; alerts LUMEN when a new headline appears.
 No crypto, no finance, no uninvited tracking.
 """
 import hashlib
@@ -157,3 +157,4 @@ def check_all() -> list[str]:
         _save(monitors)
 
     return alerts
+

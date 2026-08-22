@@ -22,5 +22,8 @@ if platform.system() == "Windows":
             f'    "{sys.executable}" "{postinstall}" -install\n'
         )
 
-print("\n✅ Setup complete! Run 'python main.py' to start MARK L.")
+print("\n✅ Setup complete!")
+print("\n  LUMEN platform :  python -m lumen serve   → http://localhost:8090")
+print("  LUMEN desktop  :  python main.py")
+
 

@@ -1,5 +1,5 @@
 """
-Personal Trainer (📚) — личный тренер EDIT.
+Personal Trainer (📚) — личный тренер LUMEN.
 
 Возможности:
   • План тренировок и питания   — профиль цели + AI-план, хранится локально
@@ -8,7 +8,7 @@ Personal Trainer (📚) — личный тренер EDIT.
     (через proactive-цикл: заметка подаётся голосом, когда время наступило)
   • Анализ сна                  — длительность, стабильность, долг сна, оценка
 
-Данные: ~/.jarvis/personal_trainer.json  (вне репозитория — это личное).
+Данные: ~/.lumen/personal_trainer.json  (вне репозитория — это личное).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 def _store_path() -> Path:
-    d = Path.home() / ".jarvis"
+    d = Path.home() / ".lumen"
     d.mkdir(parents=True, exist_ok=True)
     return d / "personal_trainer.json"
 
@@ -403,7 +403,7 @@ def trainer_action(
         _save(d)
         if m["enabled"]:
             return (f"Мотивация включена: каждый день в {m['time']} подгоню "
-                    f"короткой репликой (пока EDIT запущен). Выключить: «выключи мотивацию».")
+                    f"короткой репликой (пока LUMEN запущен). Выключить: «выключи мотивацию».")
         return "Мотивационные напоминания выключены."
 
     # ── справка ────────────────────────────────────────────────────────────
@@ -418,3 +418,4 @@ def trainer_action(
 
 # совместимость с соглашением имён actions: <module>_action
 personal_trainer_action = trainer_action
+

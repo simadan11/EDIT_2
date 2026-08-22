@@ -1,5 +1,5 @@
 """
-Local, real-time person tracking for the EDITH HUD.
+Local, real-time person tracking for the LUMEN HUD.
 
 The Gemini vision pass is accurate but slow (~1-2 s round trip), so on a live
 camera feed the silhouette/skeleton always lags behind the person. This module
@@ -226,7 +226,7 @@ class PoseTracker:
 
     # ── public API ──────────────────────────────────────────────────────
     def track(self, frame_bytes: bytes) -> list[dict]:
-        """JPEG bytes → list of HUD detections (same schema as _edith_detect).
+        """JPEG bytes → list of HUD detections (same schema as core.hud_detect.lumen_hud_detect).
 
         Each person dict has: kind/label/box (+ outline & pose when the
         MediaPipe backend is active). Never raises.
@@ -304,7 +304,7 @@ class PoseTracker:
     #
     # MediaPipe is native C++ and calls abort() on contract violations, OOM or
     # bad tensors. SIGABRT CANNOT be caught by Python try/except — in-process
-    # it would kill the whole JARVIS window. So it lives in its own process:
+    # it would kill the whole LUMEN window. So it lives in its own process:
     # if it dies, we just restart it and the UI never notices.
 
     def _spawn_worker(self) -> bool:
@@ -532,3 +532,4 @@ def get_tracker() -> PoseTracker:
 def track_people(frame_bytes: bytes) -> list[dict]:
     """Convenience wrapper — local person detections for one JPEG frame."""
     return get_tracker().track(frame_bytes)
+

@@ -3,10 +3,11 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.edit.remote",
+      "package_name": "com.lumen.remote",
       "sha256_cert_fingerprints": [
         "ЗАМЕНИТЕ: SHA256-отпечаток вашего android.keystore (см. play-store/README.md, шаг 4)"
       ]
     }
   }
 ]
+

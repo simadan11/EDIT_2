@@ -1,5 +1,5 @@
 """
-Speech-to-Text engines for MARK XL.
+Speech-to-Text engines for LUMEN.
 
 Whisper  – offline transcription via faster-whisper (VAD-buffered)
 Vosk     – offline streaming transcription (lighter)
@@ -91,3 +91,4 @@ class VoskSTT:
             return result.get("text", ""), True
         partial = json.loads(self._rec.PartialResult())
         return partial.get("partial", ""), False
+

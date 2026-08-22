@@ -74,7 +74,7 @@ def _resolve_media(src: str) -> tuple[str | None, str | None, str]:
             "`pip install yt-dlp`, or download the clip and give me the file path."
         )
 
-    tmp = tempfile.mkdtemp(prefix="jarvis_scan_")
+    tmp = tempfile.mkdtemp(prefix="lumen_scan_")
     out = os.path.join(tmp, "clip.%(ext)s")
     try:
         import yt_dlp
@@ -262,3 +262,4 @@ def scan_image(source: str) -> dict:
     finally:
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)
+

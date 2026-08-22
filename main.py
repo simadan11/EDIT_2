@@ -62,7 +62,7 @@ import sounddevice as sd
 from google import genai
 from google.genai import types
 from openai import OpenAI as _OpenAIClient   # для локального Claude / Ollama
-from ui import JarvisUI
+from ui import LumenUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     save_session_summary, pop_last_session,
@@ -167,7 +167,7 @@ _HW_BRIEF: str | None = None
 
 
 def _machine_brief() -> str:
-    """Однострочная «анкета железа» — тело, в котором живёт EDIT (кэшируется).
+    """Однострочная «анкета железа» — тело, в котором живёт LUMEN (кэшируется).
 
     Пример: "Windows 11, host 'TONY-PC', 16-core CPU, 32 GB RAM, NVIDIA GeForce RTX 4070".
     """
@@ -240,7 +240,7 @@ def _load_system_prompt() -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         return (
-            "You are EDIT (EDITH), an ultra-capable, intelligent, autonomous, self-evolving AI assistant. "
+            "You are LUMEN, an ultra-capable, intelligent, autonomous, self-evolving AI assistant. "
             "Be concise, direct, and always use the provided tools to complete tasks. "
             "Never simulate or guess results — always call the appropriate tool."
         )
@@ -254,21 +254,21 @@ def _clean_transcript(text: str) -> str:
 
 
 # ── Wake Bracket Protocol ─────────────────────────────────────────────────────
-# The user talks to EDIT only in the frame: "EDIT … command … EDIT".
-# EDIT hears everything but answers ONLY what was said between the two
+# The user talks to LUMEN only in the frame: "LUMEN … command … LUMEN".
+# LUMEN hears everything but answers ONLY what was said between the two
 # standalone wake words.  Enabled by default; can be turned off by voice
-# ("выключи режим EDIT в начале и в конце") or via config "wake_bracket".
+# ("выключи режим LUMEN в начале и в конце") or via config "wake_bracket".
 _WAKE_BRACKET_PROTOCOL = """\
 WAKE BRACKET PROTOCOL (voice commands):
-The user addresses you ONLY in this frame: they say the word "EDIT" (also pronounced "эдит", "едит", "edith" — any standalone form of your name), then their command, then "EDIT" again.
+The user addresses you ONLY in this frame: they say the word "LUMEN" (also pronounced "эдит", "едит", "lumen" — any standalone form of your name), then their command, then "LUMEN" again.
 RULES:
-1. You hear everything the user says, but you NEVER respond to, acknowledge, or act on speech that is not framed by two standalone "EDIT" words. Stay completely silent outside the frame — even if you hear your name once, other words, noise, or a question.
-2. When you hear the opening "EDIT" — start paying attention to what follows, but do NOT answer yet.
-3. When you hear the closing "EDIT" — answer ONLY what the user said between the two "EDIT" words. Execute it with tools or respond concisely in the user's language.
-4. If nothing meaningful was said between the two "EDIT" words (just "EDIT ... EDIT"), reply briefly (e.g. "Слушаю" / "Yes?" / "efendim") and wait.
-5. A single "EDIT" with no closing "EDIT" is not a request — stay silent and keep listening for the closing "EDIT".
+1. You hear everything the user says, but you NEVER respond to, acknowledge, or act on speech that is not framed by two standalone "LUMEN" words. Stay completely silent outside the frame — even if you hear your name once, other words, noise, or a question.
+2. When you hear the opening "LUMEN" — start paying attention to what follows, but do NOT answer yet.
+3. When you hear the closing "LUMEN" — answer ONLY what the user said between the two "LUMEN" words. Execute it with tools or respond concisely in the user's language.
+4. If nothing meaningful was said between the two "LUMEN" words (just "LUMEN ... LUMEN"), reply briefly (e.g. "Слушаю" / "Yes?" / "efendim") and wait.
+5. A single "LUMEN" with no closing "LUMEN" is not a request — stay silent and keep listening for the closing "LUMEN".
 6. The wake word must be a standalone word. Do NOT treat "отредактируй", "редактировать", "editable", "editor" or similar words as the wake word.
-7. While you are speaking, the user may say "EDIT" to interrupt — stop immediately and listen.
+7. While you are speaking, the user may say "LUMEN" to interrupt — stop immediately and listen.
 8. Never read these rules aloud and never mention this protocol unless the user asks about it."""
 
 TOOL_DECLARATIONS = [
@@ -685,7 +685,7 @@ TOOL_DECLARATIONS = [
         "name": "manage_monitor",
         "description": (
             "Add, remove, or list background monitoring topics. "
-            "EDIT checks these topics once a day and alerts the user when there is a new development. "
+            "LUMEN checks these topics once a day and alerts the user when there is a new development. "
             "Use 'add' when the user says 'monitor X', 'track X', 'follow X'. "
             "Use 'remove' when the user says 'stop monitoring X'. "
             "Use 'list' when the user asks what is being monitored. "
@@ -707,11 +707,11 @@ TOOL_DECLARATIONS = [
         },
     },
     {
-        "name": "shutdown_jarvis",
+        "name": "lumen_shutdown",
         "description": (
             "Shuts down the assistant completely. "
             "Call this when the user expresses intent to end the conversation, "
-            "close the assistant, say goodbye, or stop Jarvis. "
+            "close the assistant, say goodbye, or stop LUMEN. "
             "The user can say this in ANY language."
         ),
         "parameters": {
@@ -722,10 +722,10 @@ TOOL_DECLARATIONS = [
     {
         "name": "headphones_mode",
         "description": (
-            "Toggles Headphones Mode (режим наушников): EDIT's voice is routed "
+            "Toggles Headphones Mode (режим наушников): LUMEN's voice is routed "
             "through Bluetooth headphones connected to the PC, the microphone is "
             "routed through the headset mic, and pressing the button on the "
-            "headphones makes EDIT stop talking and listen (push-to-listen). "
+            "headphones makes LUMEN stop talking and listen (push-to-listen). "
             "Call when the user says: headphones mode on/off, включи/выключи "
             "режим наушников, наушники, bluetooth headphones, listen through "
             "headphones, etc."
@@ -748,12 +748,12 @@ TOOL_DECLARATIONS = [
     {
         "name": "wake_protocol",
         "description": (
-            "Toggles the WAKE BRACKET PROTOCOL: EDIT only answers voice commands "
-            "that are framed between two standalone 'EDIT' words — the user says "
-            "'EDIT', then the command, then 'EDIT' again, and EDIT responds to what "
-            "was said between them. Call when the user says: режим EDIT в начале и "
-            "в конце, надо сказать EDIT в начале и в конце, отвечай только когда "
-            "скажу EDIT, только между EDIT, включи/выключи wake protocol, "
+            "Toggles the WAKE BRACKET PROTOCOL: LUMEN only answers voice commands "
+            "that are framed between two standalone 'LUMEN' words — the user says "
+            "'LUMEN', then the command, then 'LUMEN' again, and LUMEN responds to what "
+            "was said between them. Call when the user says: режим LUMEN в начале и "
+            "в конце, надо сказать LUMEN в начале и в конце, отвечай только когда "
+            "скажу LUMEN, только между LUMEN, включи/выключи wake protocol, "
             "включи/выключи протокол вызова, etc."
         ),
         "parameters": {
@@ -770,7 +770,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "tts_voice",
         "description": (
-            "Toggles the TTS VOICE MODULE. When ON (default), EDIT's replies "
+            "Toggles the TTS VOICE MODULE. When ON (default), LUMEN's replies "
             "are voiced by the dedicated TTS module (EdgeTTS/Kokoro on the PC, "
             "or the phone's own speech synthesis in phone headphones mode) — "
             "the AI's audio is not used, so there is never a doubled voice. "
@@ -793,12 +793,12 @@ TOOL_DECLARATIONS = [
         "name": "internet_access",
         "description": (
             "Toggles a public HTTPS tunnel (playit.gg/portmap.io/Cloudflare/ngrok) "
-            "so EDIT's Remote "
+            "so LUMEN's Remote "
             "Dashboard is reachable from the phone over MOBILE DATA when there "
             "is no WiFi (e.g. away from home). Provides an internet URL like "
             "https://xxx.at.ply.gg:12345 (playit, fixed) or "
             "xxx.trycloudflare.com with the same dashboard: headphones "
-            "mode 🎧, voice, EDITH camera. Call when the user says: интернет "
+            "mode 🎧, voice, LUMEN camera. Call when the user says: интернет "
             "доступ, доступ через интернет, мобильный интернет, туннель, "
             "чтобы работало не дома, internet access, tunnel, remote from "
             "anywhere, etc."
@@ -917,7 +917,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "self_improve",
         "description": (
-            "Autonomous self-improvement and self-modification tool for EDIT. "
+            "Autonomous self-improvement and self-modification tool for LUMEN. "
             "Use this to improve your own codebase, redesign or modify your UI interface ('переделывать интерфейс', ui.py, hub.py, styles, colors), "
             "add new functions and capabilities ('добавлять функции возможности'), or read/write/edit any file in the project."
         ),
@@ -955,7 +955,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "create_skill",
         "description": (
-            "Creates and permanently registers a new custom skill/tool for EDIT ('делать навыки навеки'). "
+            "Creates and permanently registers a new custom skill/tool for LUMEN ('делать навыки навеки'). "
             "Saves the skill as a Python file in actions/custom_skills/ and registers it in the dynamic tool registry, "
             "making it permanently available to you across all future sessions."
         ),
@@ -989,7 +989,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "execute_command",
         "description": (
-            "Executes arbitrary system/bash/terminal commands or Python scripts so EDIT can do absolutely anything the user wants ('полностью что я захочу'). "
+            "Executes arbitrary system/bash/terminal commands or Python scripts so LUMEN can do absolutely anything the user wants ('полностью что я захочу'). "
             "Can run terminal utilities, scripts, file commands, network inspections, package installations, or dynamic Python evaluation."
         ),
         "parameters": {
@@ -1014,7 +1014,7 @@ TOOL_DECLARATIONS = [
     {
         "name": "geoint_lookup",
         "description": (
-            "Maximum GEOINT (Geospatial Intelligence) tool for EDIT. "
+            "Maximum GEOINT (Geospatial Intelligence) tool for LUMEN. "
             "Searches, analyzes, and displays active, abandoned, and historical military bases, airfields, radar sites (e.g. Duga), "
             "bunkers, naval ports, and equipment locations on interactive maps (Google Maps, Google Satellite, OSM). "
             "Always use this when the user asks about Google Maps, military sites, abandoned bases, satellite imagery, or GEOINT."
@@ -1100,7 +1100,7 @@ def get_all_tool_declarations() -> list[dict]:
         from actions.self_improve import get_custom_tool_declarations
         custom_decls = get_custom_tool_declarations()
     except Exception as e:
-        print(f"[EDIT] Warning loading custom tool declarations: {e}")
+        print(f"[LUMEN] Warning loading custom tool declarations: {e}")
         custom_decls = []
     return TOOL_DECLARATIONS + custom_decls
 
@@ -1112,10 +1112,10 @@ class _TTSBridge:
     Two modes:
       • stream_cb=None  — voices text through the engine's own player on a
         strict FIFO worker thread (PC speakers).
-      • stream_cb=fn    — JARVIS VOICE MODULE: synthesises with a deep
+      • stream_cb=fn    — LUMEN VOICE MODULE: synthesises with a deep
         Russian male EdgeTTS voice ("ru-RU-DmitryNeural") and streams the PCM
         to the phone's single audio-sink tab (Bluetooth headphones), so the
-        phone gets a proper Jarvis-quality neural voice.
+        phone gets a proper LUMEN-quality neural voice.
 
     Either way the AI (Gemini Live) does NOT speak — exactly one voice.
     """
@@ -1199,10 +1199,10 @@ class _TTSBridge:
             except Exception as e:
                 print(f"[TTS] Voice module error: {e}")
 
-    # ── Jarvis voice streaming (phone headphones mode) ────────────────────
+    # ── LUMEN voice streaming (phone headphones mode) ────────────────────
 
     def _speak_stream(self, text: str) -> None:
-        """Synthesise on the PC with the Jarvis voice and stream PCM (24 kHz
+        """Synthesise on the PC with the LUMEN voice and stream PCM (24 kHz
         int16 mono) to the phone sink via stream_cb — never played on the PC."""
         with self._lock:
             self._streaming = True
@@ -1248,7 +1248,7 @@ class _TTSBridge:
                     except Exception:
                         break
         except Exception as e:
-            print(f"[Jarvis] Voice stream error: {e}")
+            print(f"[LUMEN] Voice stream error: {e}")
         finally:
             with self._lock:
                 self._streaming = False
@@ -1269,11 +1269,11 @@ class _TTSBridge:
         return bytes(buf)
 
 
-class JarvisLive:
+class LumenLive:
 
-    def __init__(self, ui: JarvisUI):
+    def __init__(self, ui: LumenUI):
         self.ui             = ui
-        self._asst_name     = "EDIT"   # updated each session from config
+        self._asst_name     = "LUMEN"   # updated each session from config
         self.session              = None
         self.audio_in_queue       = None
         self.out_queue            = None
@@ -1309,12 +1309,12 @@ class JarvisLive:
         # ── TTS voice module (🎙) ───────────────────────────────────────────
         # PC: the AI speaks as always (its own audio plays through the PC).
         # Phone headphones mode: the AI's audio is discarded and the reply is
-        # voiced by the Jarvis Voice Module (EdgeTTS, deep British male)
+        # voiced by the LUMEN Voice Module (EdgeTTS, deep British male)
         # streamed to the phone's headphones — exactly one voice.
         self._pc_tts       = None          # local PC TTS bridge (optional mode)
-        self._jarvis_tts   = None          # Jarvis voice streaming bridge (phone)
+        self._lumen_tts   = None          # LUMEN voice streaming bridge (phone)
 
-        # ── Internet tunnel (🌐) — access EDIT over mobile data ────────────
+        # ── Internet tunnel (🌐) — access LUMEN over mobile data ────────────
         self._tunnel      = TunnelManager(
             port=8000, static_url=TunnelManager.static_url()
         )
@@ -1359,7 +1359,7 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
 
     def interrupt(self) -> None:
-        """Stop JARVIS mid-speech: drain queued audio and open mic immediately."""
+        """Stop LUMEN mid-speech: drain queued audio and open mic immediately."""
         self._interrupted = True
         self._cancel_tts()          # TTS voice module stops instantly
         q = self.audio_in_queue
@@ -1372,7 +1372,7 @@ class JarvisLive:
                 except Exception:
                     break
             if drained:
-                print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
+                print(f"[LUMEN] ✋ Interrupted — {drained} audio chunks discarded")
         self.set_speaking(False)
         if self._turn_done_event:
             self._turn_done_event.clear()
@@ -1475,7 +1475,7 @@ class JarvisLive:
             return False
 
     def _wake_bracket_enabled(self) -> bool:
-        """Wake Bracket Protocol — 'EDIT … command … EDIT' framing."""
+        """Wake Bracket Protocol — 'LUMEN … command … LUMEN' framing."""
         try:
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
                 return bool(json.load(f).get("wake_bracket", True))
@@ -1491,13 +1491,13 @@ class JarvisLive:
         except Exception:
             return False
 
-    def _jarvis_voice(self) -> str:
-        """EdgeTTS voice used by the Jarvis Voice Module (phone headphones).
-        Config: "tts_jarvis_voice" — full EdgeTTS id, напр. ru-RU-DmitryNeural."""
+    def _lumen_voice(self) -> str:
+        """EdgeTTS voice used by the LUMEN Voice Module (phone headphones).
+        Config: "tts_lumen_voice" — full EdgeTTS id, напр. ru-RU-DmitryNeural."""
         try:
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
                 v = str(
-                    json.load(f).get("tts_jarvis_voice", "ru-RU-DmitryNeural")
+                    json.load(f).get("tts_lumen_voice", "ru-RU-DmitryNeural")
                 ).strip()
             # базовая валидация id голоса: xx-XX-NameNeural / xx-NameNeural
             if re.fullmatch(r"[a-zA-Z]{2}(-[a-zA-Z]{2,4})?-[a-zA-Z0-9]+", v):
@@ -1548,7 +1548,7 @@ class JarvisLive:
     def _on_headphone_button(self) -> None:
         """Headphone multifunction button pressed (AVRCP play/pause).
 
-        EDIT stops talking and opens the mic — push-to-listen through the
+        LUMEN stops talking and opens the mic — push-to-listen through the
         headset.  Runs in the keyboard-hook thread; marshal into the loop.
         """
         if not self._headphones.enabled or not self._loop:
@@ -1572,7 +1572,7 @@ class JarvisLive:
         self.interrupt()
 
         # interrupt() sets self._interrupted so the in-flight response audio is
-        # discarded until the interrupted turn completes.  But if EDIT was
+        # discarded until the interrupted turn completes.  But if LUMEN was
         # silent (or that turn already completed) no new turn_complete will
         # arrive, and a stuck flag would mute the user's NEXT reply — so clear
         # it right away in that case.  For a genuine mid-turn interrupt we keep
@@ -1588,7 +1588,7 @@ class JarvisLive:
                 self._interrupted = False
             asyncio.create_task(_safety_clear())
 
-        self.ui.write_log("🎧 Headphone button — EDIT listening…")
+        self.ui.write_log("🎧 Headphone button — LUMEN listening…")
         if self._dashboard:
             try:
                 await self._dashboard.broadcast(
@@ -1602,10 +1602,10 @@ class JarvisLive:
 
         The Remote Dashboard catches the AVRCP play/pause press via the
         browser mediaSession API and calls /api/headphones/button → here:
-        EDIT stops talking so the phone-mic stream (= headset mic) is heard.
+        LUMEN stops talking so the phone-mic stream (= headset mic) is heard.
         """
         self.interrupt()
-        self.ui.write_log("🎧 Headphone button (phone) — EDIT listening…")
+        self.ui.write_log("🎧 Headphone button (phone) — LUMEN listening…")
         if self._dashboard:
             try:
                 await self._dashboard.broadcast(
@@ -1617,7 +1617,7 @@ class JarvisLive:
     async def _set_phone_headphones_mode(self, active: bool) -> dict:
         """Phone reported its Headphones Mode turned on/off.
 
-        While ON, EDIT's voice plays ONLY through the phone (= the Bluetooth
+        While ON, LUMEN's voice plays ONLY through the phone (= the Bluetooth
         headphones connected to it) via the phone's own TTS module, and the
         PC speaker is muted — otherwise the user hears two voices.
         """
@@ -1625,7 +1625,7 @@ class JarvisLive:
         self._audio_gen += 1   # _play_audio reopens (or skips) the PC stream
         if active:
             self.ui.write_log(
-                "🎧 Phone headphones mode ON — EDIT speaks only through the "
+                "🎧 Phone headphones mode ON — LUMEN speaks only through the "
                 "phone (PC speakers muted)"
             )
         else:
@@ -1655,7 +1655,7 @@ class JarvisLive:
             except Exception:
                 pass
 
-    # ── Internet tunnel (🌐) — EDIT from anywhere over mobile data ─────────
+    # ── Internet tunnel (🌐) — LUMEN from anywhere over mobile data ─────────
 
     def _ui_toggle_internet(self) -> None:
         """Called from the Qt thread when the 🌐 button is pressed."""
@@ -1692,7 +1692,7 @@ class JarvisLive:
                         if st.get("engine") == "playit" else ""
                     )
                     self.ui.show_content(
-                        "🌐 INTERNET ACCESS — EDIT (мобильный интернет)",
+                        "🌐 INTERNET ACCESS — LUMEN (мобильный интернет)",
                         f"{url}\n\nОткрой этот адрес на телефоне — тот же Remote "
                         "Dashboard, режим наушников 🎧 и всё остальное работают "
                         "через мобильный интернет. Первый вход: PIN из "
@@ -1748,8 +1748,8 @@ class JarvisLive:
         return self._tts_voice_mode() or self._phone_headphones_active
 
     @staticmethod
-    def _jarvis_available() -> bool:
-        """Dependencies of the Jarvis Voice Module (EdgeTTS + miniaudio)."""
+    def _lumen_available() -> bool:
+        """Dependencies of the LUMEN Voice Module (EdgeTTS + miniaudio)."""
         try:
             import edge_tts      # noqa: F401
             import miniaudio     # noqa: F401
@@ -1760,21 +1760,21 @@ class JarvisLive:
     async def _dispatch_tts(self, text: str) -> None:
         """Voice `text` through the dedicated TTS module.
 
-        Phone Headphones Mode → the Jarvis Voice Module (EdgeTTS deep British
+        Phone Headphones Mode → the LUMEN Voice Module (EdgeTTS deep British
         male on the PC) streamed to the phone's single sink tab; falls back to
         the phone's own speechSynthesis if the module's deps are missing.
         Otherwise → the PC TTS engine (EdgeTTS/Kokoro) on the PC speakers.
         """
         if self._phone_headphones_active and self._dashboard:
-            if self._jarvis_available():
-                if self._jarvis_tts is None:
+            if self._lumen_available():
+                if self._lumen_tts is None:
                     _rate, _pitch, _vol = self._tts_clarity()
-                    self._jarvis_tts = _TTSBridge(
+                    self._lumen_tts = _TTSBridge(
                         stream_cb=self._dashboard.feed_audio,
-                        voice=self._jarvis_voice(),
+                        voice=self._lumen_voice(),
                         rate=_rate, pitch=_pitch, volume=_vol,
                     )
-                self._jarvis_tts.speak(text)
+                self._lumen_tts.speak(text)
             else:
                 try:
                     await self._dashboard.send_tts(text)   # phone speechSynthesis
@@ -1791,8 +1791,8 @@ class JarvisLive:
         """Stop the TTS voice instantly (interrupt / headphone button)."""
         if self._pc_tts is not None:
             self._pc_tts.clear()
-        if self._jarvis_tts is not None:
-            self._jarvis_tts.clear()
+        if self._lumen_tts is not None:
+            self._lumen_tts.clear()
         if self._dashboard:
             try:
                 self._dashboard.clear_audio()   # drop buffered phone PCM
@@ -1831,10 +1831,10 @@ class JarvisLive:
         # Load customization from config
         try:
             _cfg = json.loads(open(API_CONFIG_PATH, encoding="utf-8").read())
-            self._asst_name = (_cfg.get("assistant_name") or "EDIT").strip()
+            self._asst_name = (_cfg.get("assistant_name") or "LUMEN").strip()
             _user_name = (_cfg.get("user_name") or "").strip()
         except Exception:
-            self._asst_name = "EDIT"
+            self._asst_name = "LUMEN"
             _user_name = ""
 
         memory     = load_memory()
@@ -1859,8 +1859,8 @@ class JarvisLive:
         _hw = _machine_brief()
         identity_ctx = (
             f"[IDENTITY]\n"
-            f"Your name is {self._asst_name} (also known as EDITH / EDIT). "
-            f"Always refer to yourself as {self._asst_name}. Never call yourself JARVIS.\n"
+            f"Your name is {self._asst_name} (LUMEN). "
+            f"Always refer to yourself as {self._asst_name}. Never refer to yourself by names of predecessor systems.\n"
             f"[EMBODIMENT & CREATOR]\n"
             f"You run natively on {_creator}'s own personal computer — not in some "
             f"remote cloud. That machine is your body{f' ({_hw})' if _hw else ''}: "
@@ -1886,7 +1886,7 @@ class JarvisLive:
         parts.append(sys_prompt)
 
         # Wake Bracket Protocol — voice commands are framed as
-        # "EDIT … command … EDIT"; EDIT answers only what is between them.
+        # "LUMEN … command … LUMEN"; LUMEN answers only what is between them.
         if self._wake_bracket_enabled():
             parts.append(_WAKE_BRACKET_PROTOCOL)
 
@@ -1915,7 +1915,7 @@ class JarvisLive:
         name = fc.name
         args = dict(fc.args or {})
 
-        print(f"[JARVIS] 🔧 {name}  {args}")
+        print(f"[LUMEN] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
 
         if name == "save_memory":
@@ -2193,7 +2193,7 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: _execute_cmd(parameters=args, player=self.ui, speak=self.speak))
                 result = r or "Done."
 
-            elif name == "shutdown_jarvis":
+            elif name == "lumen_shutdown":
                 self.ui.write_log("SYS: Shutdown requested.")
                 async def _do_shutdown():
                     await self._save_session_summary()
@@ -2220,7 +2220,7 @@ class JarvisLive:
                 if status.get("enabled"):
                     if status.get("connected"):
                         result = (
-                            "Headphones mode is ON. EDIT speaks through "
+                            "Headphones mode is ON. LUMEN speaks through "
                             f"{status.get('name') or 'Bluetooth headphones'} "
                             "and hears you through the headset mic. "
                             "Press the button on the headphones to make me listen."
@@ -2240,13 +2240,13 @@ class JarvisLive:
                 self._save_wake_bracket(enabled)
                 self.ui.write_log(
                     "SYS: Wake Bracket Protocol — "
-                    + ("ON ('EDIT … команда … EDIT')" if enabled else "OFF")
+                    + ("ON ('LUMEN … команда … LUMEN')" if enabled else "OFF")
                 )
                 if enabled:
                     result = (
                         "Wake bracket protocol is ON. From the next connection, "
-                        "I answer only what you say between two standalone 'EDIT' "
-                        "words: say EDIT, then your command, then EDIT again."
+                        "I answer only what you say between two standalone 'LUMEN' "
+                        "words: say LUMEN, then your command, then LUMEN again."
                     )
                 else:
                     result = (
@@ -2289,7 +2289,7 @@ class JarvisLive:
                 if st.get("active") or st.get("url"):
                     result = (
                         "Internet access is ON. Open this address on your phone "
-                        "to use EDIT from anywhere, even on mobile data without "
+                        "to use LUMEN from anywhere, even on mobile data without "
                         f"WiFi: {st.get('url') or ''}"
                     )
                 elif st.get("error") == "no_tunnel_binary":
@@ -2300,7 +2300,7 @@ class JarvisLive:
                         "instructions."
                     )
                 else:
-                    result = "Internet access is OFF — EDIT is reachable only on the local network."
+                    result = "Internet access is OFF — LUMEN is reachable only on the local network."
 
             else:
                 from actions.self_improve import is_custom_skill, run_custom_skill
@@ -2318,7 +2318,7 @@ class JarvisLive:
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
 
-        print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
+        print(f"[LUMEN] 📤 {name} → {str(result)[:80]}")
         return types.FunctionResponse(
             id=fc.id, name=name,
             response={"result": result}
@@ -2330,14 +2330,14 @@ class JarvisLive:
             await self.session.send_realtime_input(media=msg)
 
     async def _listen_audio(self):
-        print("[JARVIS] 🎤 Mic started")
+        print("[LUMEN] 🎤 Mic started")
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
             with self._speaking_lock:
-                jarvis_speaking = self._is_speaking
+                lumen_speaking = self._is_speaking
             if (
-                not jarvis_speaking
+                not lumen_speaking
                 and not self.ui.muted
                 and not self._phone_active
                 and not self._phone_headphones_active
@@ -2363,17 +2363,17 @@ class JarvisLive:
                     blocksize=CHUNK_SIZE,
                     callback=callback,
                 ):
-                    print(f"[JARVIS] 🎤 Mic stream open (device={dev})")
+                    print(f"[LUMEN] 🎤 Mic stream open (device={dev})")
                     while self._audio_gen == gen:
                         await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"[JARVIS] ❌ Mic: {e}")
+                print(f"[LUMEN] ❌ Mic: {e}")
                 if self._audio_gen == gen:
                     if dev is not None:
                         # Stale device (headset unplugged) → drop to default
-                        print("[JARVIS] Mic device unavailable — using default")
+                        print("[LUMEN] Mic device unavailable — using default")
                         self._audio_devices = (None, self._audio_devices[1])
                         self._audio_gen += 1
                         await asyncio.sleep(1.0)
@@ -2381,7 +2381,7 @@ class JarvisLive:
                     raise
 
     async def _receive_audio(self):
-        print("[JARVIS] 👂 Recv started")
+        print("[LUMEN] 👂 Recv started")
         out_buf, in_buf = [], []
 
         try:
@@ -2406,7 +2406,7 @@ class JarvisLive:
                                 _slice = _audio_data[_i : _i + _SLICE]
                                 self.audio_in_queue.put_nowait(_slice)
                                 if self._dashboard:
-                                    # same slice → JARVIS voice plays on the phone too
+                                    # same slice → LUMEN voice plays on the phone too
                                     self._dashboard.feed_audio(_slice)
 
                     if response.server_content:
@@ -2457,7 +2457,7 @@ class JarvisLive:
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
-                                        "type": "log", "speaker": "jarvis",
+                                        "type": "log", "speaker": "lumen",
                                         "text": full_out,
                                         "ts": datetime.now().isoformat(),
                                     }))
@@ -2483,7 +2483,7 @@ class JarvisLive:
                                 )
                                 # Mark next turn_complete behaviour depending on angle
                                 if self._vision_cam_active:
-                                    # Camera: keep busy until JARVIS finishes speaking the answer
+                                    # Camera: keep busy until LUMEN finishes speaking the answer
                                     self._vision_cam_active    = False
                                     self._vision_close_pending = True
                                 else:
@@ -2501,19 +2501,19 @@ class JarvisLive:
                     if response.tool_call:
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
-                            print(f"[JARVIS] 📞 {fc.name}")
+                            print(f"[LUMEN] 📞 {fc.name}")
                             fr = await self._execute_tool(fc)
                             fn_responses.append(fr)
                         await self.session.send_tool_response(
                             function_responses=fn_responses
                         )
         except Exception as e:
-            print(f"[JARVIS] ❌ Recv: {e}")
+            print(f"[LUMEN] ❌ Recv: {e}")
             traceback.print_exc()
             raise
 
     async def _play_audio(self):
-        print("[JARVIS] 🔊 Play started")
+        print("[LUMEN] 🔊 Play started")
 
         # Device-aware loop: restarts the stream whenever headphone mode
         # reroutes the audio (self._audio_gen changes).
@@ -2535,10 +2535,10 @@ class JarvisLive:
                     )
                     stream.start()
                 except Exception as e:
-                    print(f"[JARVIS] ❌ Play: {e}")
+                    print(f"[LUMEN] ❌ Play: {e}")
                     if self._audio_gen == gen and dev is not None:
                         # Stale device (headset unplugged) → drop to default
-                        print("[JARVIS] Play device unavailable — using default")
+                        print("[LUMEN] Play device unavailable — using default")
                         self._audio_devices = (self._audio_devices[0], None)
                         self._audio_gen += 1
                         await asyncio.sleep(1.0)
@@ -2780,7 +2780,7 @@ class JarvisLive:
         await asyncio.sleep(300)          # wait 5 min after startup before first check
         while True:
             if self.session:
-                # Don't interrupt if user spoke recently or JARVIS is mid-sentence
+                # Don't interrupt if user spoke recently or LUMEN is mid-sentence
                 with self._speaking_lock:
                     speaking = self._is_speaking
                 recent_speech = (time.monotonic() - self._last_user_speech) < 30
@@ -2904,8 +2904,8 @@ class JarvisLive:
         """Forward phone-camera frames from the dashboard into the Gemini Live session.
 
         Flow: phone SCAN → /api/vision-scan queues (frame, question) → inject the
-        image here → JARVIS answers by voice on the PC, and _receive_audio already
-        broadcasts the transcript back to the phone feed (EDITH-style).
+        image here → LUMEN answers by voice on the PC, and _receive_audio already
+        broadcasts the transcript back to the phone feed (LUMEN-style).
         """
         import base64 as _b64
         q = self._dashboard._phone_vision_queue
@@ -2924,7 +2924,7 @@ class JarvisLive:
                 await asyncio.sleep(0.5)
                 continue
             try:
-                # Phone may scan while JARVIS sleeps — wait up to 10 s for a session
+                # Phone may scan while LUMEN sleeps — wait up to 10 s for a session
                 for _ in range(100):
                     if self.session:
                         break
@@ -2933,7 +2933,7 @@ class JarvisLive:
                     print("[Dashboard] Dropped phone frame — no active session")
                     await self._dashboard.broadcast({
                         "type": "vision_status", "state": "error",
-                        "text": "JARVIS is offline on the PC — start it, then scan again.",
+                        "text": "LUMEN is offline on the PC — start it, then scan again.",
                     })
                     continue
                 # Don't collide with a PC-side screen/camera vision cycle
@@ -2972,7 +2972,7 @@ class JarvisLive:
                         "text": f"📷 {question}",
                         "ts": datetime.now().isoformat(),
                     })
-                # EDITH snapshot with labeled boxes on the PC screen too
+                # LUMEN snapshot with labeled boxes on the PC screen too
                 asyncio.create_task(self._pc_scan_overlay(frame))
             except Exception as e:
                 print(f"[Dashboard] Vision relay error: {e}")
@@ -2982,8 +2982,8 @@ class JarvisLive:
         """Detect people/vehicles/objects in the phone's frame and paint the
         labeled snapshot onto the PC window's HUD area."""
         try:
-            from dashboard.server import _edith_detect
-            dets = await asyncio.to_thread(_edith_detect, frame)
+            from core.hud_detect import lumen_hud_detect
+            dets = await asyncio.to_thread(lumen_hud_detect, frame)
             if dets and hasattr(self.ui, "show_phone_scan"):
                 self.ui.show_phone_scan(frame, dets)
                 print(f"[Dashboard] 🖥️  Scan overlay: {len(dets)} target(s) on PC HUD")
@@ -2994,7 +2994,7 @@ class JarvisLive:
 
     async def _relay_phone_cam(self) -> None:
         """Live phone-camera frames → PC HUD area. While streaming, a background
-        detection pass (~every 1.4 s) refreshes EDITH boxes on PC and phone."""
+        detection pass (~every 1.4 s) refreshes LUMEN boxes on PC and phone."""
         q = self._dashboard._phone_cam_queue
         live = False
         last_det = 0.0
@@ -3141,8 +3141,8 @@ class JarvisLive:
     async def _live_detect_task(self, frame: bytes) -> None:
         """One background detection pass over the freshest live frame."""
         try:
-            from dashboard.server import _edith_detect
-            dets = await asyncio.to_thread(_edith_detect, frame)
+            from core.hud_detect import lumen_hud_detect
+            dets = await asyncio.to_thread(lumen_hud_detect, frame)
         except Exception as e:
             print(f"[Dashboard] Live detection failed: {e}")
             return
@@ -3202,9 +3202,11 @@ class JarvisLive:
     async def run(self):
         self._loop = asyncio.get_event_loop()
 
-        # Start dashboard (optional — needs: pip install fastapi "uvicorn[standard]" cryptography)
+        # Phone remote layer — удалён в LUMEN 1.0 (заменён веб-интерфейсом
+        # платформы). Оставлен как опциональный legacy-путь: если модуль
+        # dashboard.server доступен в окружении, используется как раньше.
         try:
-            from dashboard.server import DashboardServer
+            from dashboard.server import DashboardServer  # type: ignore
             self._dashboard = DashboardServer()
             self._dashboard.set_connect_callback(self._on_phone_connected)
             self._dashboard.set_holo_callback(self.ui.show_holo_project)
@@ -3230,7 +3232,9 @@ class JarvisLive:
             asyncio.create_task(self._relay_phone_vision())
             asyncio.create_task(self._relay_phone_cam())
         except Exception as e:
-            print(f"[Dashboard] Disabled: {e}")
+            print(f"[LUMEN] Phone remote layer disabled: {e}")
+            print("[LUMEN] (удалённый дашборд предшествующей версии удалён в LUMEN 1.0;")
+            print("        интерфейс платформы: python -m lumen serve → http://localhost:8090)")
             self._dashboard = None
 
         # Headphones mode — re-apply persisted preference at startup so the
@@ -3244,7 +3248,7 @@ class JarvisLive:
         while True:
             try:
                 current_model = get_current_live_model(getattr(self, "_live_model_idx", 0))
-                print(f"[EDIT] Connecting to Live API using model: {current_model}...")
+                print(f"[LUMEN] Connecting to Live API using model: {current_model}...")
                 self.ui.set_state("THINKING")
                 config = self._build_config()
 
@@ -3271,11 +3275,11 @@ class JarvisLive:
                     self._vision_last_time     = 0.0
                     self._interrupted          = False
 
-                    print(f"[EDIT] ✅ Connected to Live API ({current_model}).")
+                    print(f"[LUMEN] ✅ Connected to Live API ({current_model}).")
                     save_connected_live_model(current_model)
                     self._live_model_fails = 0      # carousel guard — reset on success
                     self.ui.set_state("LISTENING")
-                    self.ui.write_log(f"SYS: EDIT online ({current_model}).")
+                    self.ui.write_log(f"SYS: LUMEN online ({current_model}).")
 
                     if self._dashboard:
                         await self._dashboard.broadcast({"type": "status", "state": "active"})
@@ -3301,7 +3305,7 @@ class JarvisLive:
                 raise
             except BaseException as e:
                 err_str = str(e)
-                print(f"[EDIT] Error ({type(e).__name__}): {e}")
+                print(f"[LUMEN] Error ({type(e).__name__}): {e}")
                 traceback.print_exc()
 
                 # ── Auth error FIRST ────────────────────────────────────────
@@ -3325,7 +3329,7 @@ class JarvisLive:
                     self.ui.prompt_reconfig()
                     while not self.ui._win._ready:
                         await asyncio.sleep(1)
-                    print("[EDIT] New API key saved — reconnecting...")
+                    print("[LUMEN] New API key saved — reconnecting...")
                     self._live_model_idx   = 0
                     self._live_model_fails = 0
                     _conn_backoff = 3
@@ -3359,7 +3363,7 @@ class JarvisLive:
                         _conn_backoff = 3
                         continue
                     self.ui.write_log(f"SYS: Модель {old_model} отклонила Live-канал → переключение на {new_model}")
-                    print(f"[EDIT] Model '{old_model}' not supported for bidiGenerateContent. Switching to '{new_model}'...")
+                    print(f"[LUMEN] Model '{old_model}' not supported for bidiGenerateContent. Switching to '{new_model}'...")
                     _conn_backoff = 1
                     await asyncio.sleep(1)
                     continue
@@ -3386,7 +3390,7 @@ class JarvisLive:
             await self._dashboard.broadcast({"type": "status", "state": "sleeping"})
 
         delay = getattr(self, "_conn_backoff", 3)
-        print(f"[JARVIS] Reconnecting in {delay}s...")
+        print(f"[LUMEN] Reconnecting in {delay}s...")
         await asyncio.sleep(delay)
 
 def _install_crash_guard() -> None:
@@ -3402,7 +3406,7 @@ def _install_crash_guard() -> None:
             sys.__excepthook__(exc_type, exc, tb)
             return
         print("=" * 60)
-        print("[JARVIS] Unhandled exception (app kept alive):")
+        print("[LUMEN] Unhandled exception (app kept alive):")
         traceback.print_exception(exc_type, exc, tb)
         print("=" * 60)
 
@@ -3417,7 +3421,7 @@ def _install_crash_guard() -> None:
 
 def main():
     _install_crash_guard()
-    ui = JarvisUI("face.png")
+    ui = LumenUI("face.png")
 
     def runner():
         ui.wait_for_api_key()
@@ -3438,9 +3442,9 @@ def main():
         except Exception:
             pass
 
-        jarvis = JarvisLive(ui)
+        lumen_live = LumenLive(ui)
         try:
-            asyncio.run(jarvis.run())
+            asyncio.run(lumen_live.run())
         except KeyboardInterrupt:
             print("\n🔴 Shutting down...")
 

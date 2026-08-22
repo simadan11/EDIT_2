@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LUMEN — ИИ-платформа</title>
+  <meta name="description" content="LUMEN — самостоятельная ИИ-платформа: ядро LUMEN-1, конвейер «Луч», контекстная память, инструменты и обучающая петля."/>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="app">
+    <!-- ═══════════ ЛЕВАЯ РЕЙКА ═══════════ -->
+    <aside class="rail">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="LUMEN" class="brand-logo"/>
+        <div class="brand-text">
+          <span class="brand-name">LUMEN</span>
+          <span class="brand-sub">ИИ-платформа</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="#/dialog" data-view="dialog" class="nav-item active">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M4 5h16v11H8l-4 4z"/></svg>
+          <span>Диалог</span>
+        </a>
+        <a href="#/tools" data-view="tools" class="nav-item">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M14 6l4 4-9 9-4 1 1-4zM15 3l6 6"/></svg>
+          <span>Инструменты</span>
+        </a>
+        <a href="#/memory" data-view="memory" class="nav-item">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 3a7 7 0 0 1 7 7c0 2-1 3.5-2 4.7V17a2 2 0 0 1-2 2h-1v2H10v-2H9a2 2 0 0 1-2-2v-2.3C6 13.5 5 12 5 10a7 7 0 0 1 7-7z"/></svg>
+          <span>Память</span>
+        </a>
+        <a href="#/system" data-view="system" class="nav-item">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M4 6h16v10H4zM9 20h6M12 16v4"/></svg>
+          <span>Система</span>
+        </a>
+        <a href="#/settings" data-view="settings" class="nav-item">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8 4l2-1.5-2-3.5-2.4.8a8 8 0 0 0-1.6-1L15.5 4h-4l-.4 2.8a8 8 0 0 0-1.6 1L7 7l-2 3.5L7 12l-2 1.5 2 3.5 2.4-.8a8 8 0 0 0 1.6 1l.4 2.8h4l.4-2.8a8 8 0 0 0 1.6-1l2.4.8 2-3.5z" transform="scale(0.92) translate(1,0)"/></svg>
+          <span>Настройки</span>
+        </a>
+      </nav>
+
+      <div class="rail-footer">
+        <div class="status-line">
+          <span class="dot" id="backend-dot"></span>
+          <span id="backend-label">ядро…</span>
+        </div>
+        <div class="rail-ver" id="rail-ver">LUMEN-1</div>
+      </div>
+    </aside>
+
+    <!-- ═══════════ ОСНОВНАЯ ОБЛАСТЬ ═══════════ -->
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb" id="crumb">Диалог</div>
+        <div class="top-actions">
+          <button class="ghost-btn" id="new-session" title="Начать новую сессию">＋ Новая сессия</button>
+          <div class="clock" id="clock"></div>
+        </div>
+      </header>
+
+      <!-- ─── ДИАЛОГ ─── -->
+      <section id="view-dialog" class="view">
+        <div class="chat" id="chat">
+          <div class="chat-inner" id="chat-inner"></div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <textarea id="input" rows="1"
+              placeholder="Спросите LUMEN: время, погода, память, инструменты…"></textarea>
+            <button id="send" class="send-btn" title="Отправить">
+              <svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-3-6z"/></svg>
+            </button>
+          </div>
+          <div class="composer-hint">Enter — отправить · Shift+Enter — новая строка</div>
+        </div>
+      </section>
+
+      <!-- ─── ИНСТРУМЕНТЫ ─── -->
+      <section id="view-tools" class="view hidden">
+        <div class="view-head">
+          <h1>Инструменты</h1>
+          <p>Реестр LUMEN: встроенные инструменты ядра и legacy-адаптеры. Нажмите «Запустить», чтобы выполнить прямо отсюда.</p>
+        </div>
+        <div class="tools-grid" id="tools-grid"></div>
+      </section>
+
+      <!-- ─── ПАМЯТЬ ─── -->
+      <section id="view-memory" class="view hidden">
+        <div class="view-head">
+          <h1>Память</h1>
+          <p>Семантический слой: долговременные факты по категориям. LUMEN сам подхватывает факты из разговора («меня зовут…», «живу в…»).</p>
+        </div>
+        <div class="mem-layout">
+          <div class="mem-side">
+            <div class="mem-cats" id="mem-cats"></div>
+            <div class="mem-add">
+              <h3>Новый факт</h3>
+              <select id="mem-cat"></select>
+              <input id="mem-key" placeholder="ключ (например: user_name)"/>
+              <input id="mem-value" placeholder="значение"/>
+              <button id="mem-add-btn" class="accent-btn">Сохранить</button>
+            </div>
+          </div>
+          <div class="mem-main">
+            <input id="mem-search" class="search" placeholder="Вспомнить… (relevance-поиск)"/>
+            <div id="mem-list" class="mem-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── СИСТЕМА ─── -->
+      <section id="view-system" class="view hidden">
+        <div class="view-head">
+          <h1>Система</h1>
+          <p>Состояние платформы, машины и обучающей петли.</p>
+        </div>
+        <div class="sys-grid" id="sys-grid"></div>
+        <div class="pipeline-card" id="pipeline-card"></div>
+        <div class="sys-sessions">
+          <h3>Сессии</h3>
+          <div id="sessions-list" class="sessions-list"></div>
+        </div>
+      </section>
+
+      <!-- ─── НАСТРОЙКИ ─── -->
+      <section id="view-settings" class="view hidden">
+        <div class="view-head">
+          <h1>Настройки</h1>
+          <p>Конфигурация платформы: модуль генерации, персона, контекст, безопасность, голос, внешний вид.</p>
+        </div>
+        <div class="settings-grid" id="settings-grid"></div>
+        <div class="settings-actions">
+          <button id="save-settings" class="accent-btn">Сохранить</button>
+          <span class="hint">Применяется к ядру сразу, без перезапуска.</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast-root"></div>
+  <div id="modal-root"></div>
+  <script src="app.js"></script>
+</body>
+</html>

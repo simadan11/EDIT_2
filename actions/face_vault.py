@@ -1,7 +1,7 @@
 """
 actions/face_vault.py — Face Vault (private, manual-label face library)
 
-Privacy by design (consistent with MARK L's existing stance):
+Privacy by design (consistent with LUMEN's existing stance):
   • Faces are detected and stored locally on YOUR machine only.
   • Every face is saved WITHOUT a name. Names are typed by the owner manually.
   • There is NO automatic identification, NO account/owner lookup, NO network
@@ -132,7 +132,7 @@ def _phash(gray_square: "np.ndarray", size: int = 32, hash_size: int = 8) -> int
 def _hamming(a: int, b: int) -> int:
     return bin(a ^ b).count("1")
 
-# ── reusable face primitives (Face Vault + EDIT WEB login share these) ───────
+# ── reusable face primitives (Face Vault + LUMEN WEB login share these) ───────
 
 def phash_of_crop(crop_bgr) -> int | None:
     """64-bit perceptual hash of a BGR/GRAY ndarray crop, or None on failure."""
@@ -512,3 +512,4 @@ def get_vault() -> FaceVault:
             if _vault is None:
                 _vault = FaceVault()
     return _vault
+

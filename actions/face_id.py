@@ -1,5 +1,5 @@
 """
-Face detection + recognition for the EDITH HUD.
+Face detection + recognition for the LUMEN HUD.
 
 Two independent jobs:
 
@@ -499,3 +499,4 @@ def enroll(frame_bytes: bytes, name: str) -> bool:
 def save_new_faces(frame_bytes: bytes, faces: list[dict]) -> int:
     """Save only face appearances not already captured on disk."""
     return get_engine().save_new_faces(frame_bytes, faces)
+

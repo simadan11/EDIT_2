@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
-//  EDIT — Remote Control через Cloudflare Workers
+//  LUMEN — Remote Control через Cloudflare Workers
 //
 //  Что это: тонкий HTTPS-прокси («красивая входная дверь») перед стабильным
 //  Cloudflare Tunnel URL вашего ПК. Телефон открывает короткий адрес вида
-//      https://edit-remote.<ваш-sub>.workers.dev/?k=СЕКРЕТ
+//      https://lumen-remote.<ваш-sub>.workers.dev/?k=СЕКРЕТ
 //  а Worker прозрачно пробрасывает HTTP и WebSocket на домашний дашборд.
 //
-//  Чего Worker НЕ делает: он не запускает самого ассистента (EDIT — локальный
+//  Чего Worker НЕ делает: он не запускает самого ассистента (LUMEN — локальный
 //  Python-процесс: микрофон, экран, файлы). Здесь только проксирование.
 //
 //  Настройка: 2 переменные в wrangler.toml — ORIGIN и SECRET.
@@ -23,8 +23,8 @@ export default {
 
     // ── 1. Свой слой авторизации поверх PIN-аутентификации приложения ─────
     // Браузер не умеет слать кастомные заголовки в WebSocket, поэтому секрет
-    // принимаем и из query (?k=...), и из заголовка X-EDIT-Key.
-    const k = url.searchParams.get("k") || request.headers.get("X-EDIT-Key");
+    // принимаем и из query (?k=...), и из заголовка X-LUMEN-Key.
+    const k = url.searchParams.get("k") || request.headers.get("X-LUMEN-Key");
     if (secret && k !== secret) {
       // Специально отвечаем 404, а не 403 — чужим не подсказываем, что тут живёт сервис.
       return new Response("404", { status: 404 });
@@ -49,3 +49,4 @@ export default {
     return new Response(resp.body, { status: resp.status, headers: h });
   },
 };
+

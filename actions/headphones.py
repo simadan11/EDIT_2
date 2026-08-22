@@ -1,15 +1,15 @@
 """
-Headphones Mode (🎧 Режим наушников) for EDIT / MARK.
+Headphones Mode (🎧 Режим наушников) for LUMEN.
 
 Turns a Bluetooth headset into a hands-free channel for the assistant:
 
   • Detects Bluetooth audio endpoints currently connected to the PC.
-  • Routes EDIT's voice output → BT headphones (A2DP / Stereo endpoint).
+  • Routes LUMEN's voice output → BT headphones (A2DP / Stereo endpoint).
   • Routes the microphone input ← BT headset mic (Hands-Free endpoint,
     falls back to the default PC mic when the headset has no mic).
   • Listens for the headphone's multifunction button (AVRCP play/pause is
     translated by Windows into the media key VK_MEDIA_PLAY_PAUSE) — a tap
-    makes EDIT stop talking and start listening (push-to-listen).
+    makes LUMEN stop talking and start listening (push-to-listen).
 
 Detection
 ---------
@@ -430,3 +430,4 @@ class HeadphonesManager:
                 self._on_button()
             except Exception as e:
                 print(f"[Headphones] Button handler error: {e}")
+

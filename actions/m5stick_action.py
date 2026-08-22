@@ -1,5 +1,5 @@
 """
-M5Stick Voice Actions — голосовое управление M5Stick через MARK L.
+M5Stick Voice Actions — голосовое управление M5Stick через LUMEN.
 
 Интеграция M5Stick с основным AI ассистентом.
 Позволяет управлять устройством голосовыми командами.
@@ -313,7 +313,7 @@ def setup_m5stick_handlers(ai_callback=None):
     def on_connect(data):
         """Handle connection."""
         ctrl.display_clear()
-        ctrl.display_title("MARK L", "Connected!")
+        ctrl.display_title("LUMEN", "Connected!")
         ctrl.led_color("cyan", 50)
     
     def on_disconnect(data):
@@ -360,3 +360,4 @@ def handle_m5stick_tool(args: dict) -> str:
     """Handle M5Stick tool calls from Gemini."""
     command = args.get("command", "")
     return m5stick_action(command)
+

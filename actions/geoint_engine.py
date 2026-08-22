@@ -1,6 +1,6 @@
 # actions/geoint_engine.py — MAXIMUM GEOINT: 420+ Military & Historical Sites (Ukraine, Russia & Global Focus)
 """
-Maximum GEOINT (Geospatial Intelligence) Engine for EDIT.
+Maximum GEOINT (Geospatial Intelligence) Engine for LUMEN.
 Provides access to interactive maps (Google Maps, Google Satellite, Copernicus Sentinel-2, NASA VIIRS Thermal,
 OpenStreetMap, WikiMapia) with over 420+ marked military sites (active, abandoned, historical, airfields, radar,
 bunkers, naval stations, missile silos, and equipment locations) — with a primary focus on Ukraine and Russia.
@@ -1758,7 +1758,7 @@ def query_osm_overpass(lat: float, lon: float, radius_km: float = 25.0, max_resu
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "EDIT-GEOINT-Engine/3.0 (public-osint-research)"}
+            headers={"User-Agent": "LUMEN-GEOINT-Engine/3.0 (public-osint-research)"}
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -1893,7 +1893,7 @@ def generate_html_map(target_site: Optional[Dict[str, Any]] = None, filter_categ
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛰️ EDIT GEOINT / OSINT Hub — 420+ Military & Historical Sites Map</title>
+    <title>🛰️ LUMEN GEOINT / OSINT Hub — 420+ Military & Historical Sites Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body, html {{
@@ -2024,7 +2024,7 @@ def generate_html_map(target_site: Optional[Dict[str, Any]] = None, filter_categ
 </head>
 <body>
     <div class="hud-topbar">
-        <div class="hud-title">🛰️ EDIT GEOINT HUB (420+ ОБЪЕКТОВ)</div>
+        <div class="hud-title">🛰️ LUMEN GEOINT HUB (420+ ОБЪЕКТОВ)</div>
         <button class="hud-btn active" onclick="filterCountry('all')">🟢 Все объекты ({len(sites_to_render)})</button>
         <button class="hud-btn hud-btn-ua" onclick="filterCountry('ukraine')">🇺🇦 Украина (135+)</button>
         <button class="hud-btn hud-btn-ru" onclick="filterCountry('russia')">🇷🇺 Россия (215+)</button>
@@ -2207,7 +2207,7 @@ def open_map_in_browser(target_site: Optional[Dict[str, Any]] = None, filter_cat
 
 def geoint_lookup(parameters: dict, player=None, speak=None) -> str:
     """
-    Maximum GEOINT tool for EDIT (420+ Sites with AI Assessment & Multi-Spectral links).
+    Maximum GEOINT tool for LUMEN (420+ Sites with AI Assessment & Multi-Spectral links).
     parameters:
         query: str
         category: str ("all" | "active" | "abandoned" | "radar" | "airbase" | "missile" | "bunker")
@@ -2285,3 +2285,4 @@ def geoint_lookup(parameters: dict, player=None, speak=None) -> str:
             pass
 
     return report_text
+

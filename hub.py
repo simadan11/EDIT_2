@@ -1,6 +1,6 @@
-# hub.py — EDIT GEOINT / OSINT Hub: 467+ Strategic Sites (Ukraine, Russia & Global Focus)
+# hub.py — LUMEN GEOINT / OSINT Hub: 467+ Strategic Sites (Ukraine, Russia & Global Focus)
 """
-EDIT GEOINT / OSINT Hub — Tactical Command Center for Geospatial Intelligence.
+LUMEN GEOINT / OSINT Hub — Tactical Command Center for Geospatial Intelligence.
 Provides interactive access to multi-layer maps (Google Maps, Google Satellite, OpenStreetMap, Esri Imagery, OpenTopoMap)
 marking over 467+ active, abandoned, and historical military bases, radar sites, airfields, bunkers, naval stations,
 ICBM silos, and equipment locations — with a primary focus on Ukraine and Russia.
@@ -51,7 +51,7 @@ def _load_config():
 class OSINTHub(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🛰️ EDIT GEOINT / OSINT Hub — 467+ Военных и исторических объектов (Украина, Россия & Мир)")
+        self.setWindowTitle("🛰️ LUMEN GEOINT / OSINT Hub — 467+ Военных и исторических объектов (Украина, Россия & Мир)")
         self.resize(1480, 930)
         self.setMinimumSize(1024, 720)
 
@@ -483,3 +483,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

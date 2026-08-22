@@ -1,5 +1,5 @@
 """
-Vector face database — the "face print" store behind EDITH's identification.
+Vector face database — the "face print" store behind LUMEN's identification.
 
 This implements the classic face-recognition pipeline:
 
@@ -512,3 +512,4 @@ def get_db() -> FaceDB:
             if _db is None:
                 _db = FaceDB()
     return _db
+

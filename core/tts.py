@@ -1,5 +1,5 @@
 """
-Text-to-Speech engines for MARK XL.
+Text-to-Speech engines for LUMEN.
 
 EdgeTTS     – free Microsoft TTS (internet required, no API key)
 Kokoro      – fully offline neural TTS (~330 MB model)
@@ -460,3 +460,4 @@ def create_tts_player(config: dict) -> TTSPlayer:
                                pitch=str(config.get("tts_pitch", "") or ""),
                                volume=str(config.get("tts_volume", "") or ""))
     return TTSPlayer(engine)
+

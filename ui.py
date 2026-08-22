@@ -461,7 +461,7 @@ class SphereCanvas(QWidget):
         self.state    = "INITIALISING"
         self.speaking = False
         self.muted    = False
-        self._assistant_name = "EDIT"
+        self._assistant_name = "LUMEN"
 
         # fibonacci-sphere particles: (x, y, z, phase, speed)
         rng = random.Random(11)
@@ -653,7 +653,7 @@ class SphereCanvas(QWidget):
         fh.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 150)
         p.setFont(fh)
         p.setPen(qcol(C.TEXT_DIM, 170))
-        n = (self._assistant_name or "jarvis").replace(".", "").lower() or "jarvis"
+        n = (self._assistant_name or "lumen").replace(".", "").lower() or "lumen"
         p.drawText(QRectF(0, hint_y, W, 12), Qt.AlignmentFlag.AlignCenter,
                    f'say "{n}..."')
 
@@ -1406,7 +1406,7 @@ class LogWidget(QTextEdit):
         self._text    = ""
         self._pos     = 0
         self._tag     = "sys"
-        self._ai_name_lc = "jarvis"   # updated when assistant name changes
+        self._ai_name_lc = "lumen"   # updated when assistant name changes
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
@@ -1429,7 +1429,7 @@ class LogWidget(QTextEdit):
         tl = self._text.lower()
         _ai_pfx = f"{self._ai_name_lc}:"
         if   tl.startswith("you:"):                              self._tag = "you"
-        elif tl.startswith(_ai_pfx) or tl.startswith("jarvis:"): self._tag = "ai"
+        elif tl.startswith(_ai_pfx) or tl.startswith("lumen:"): self._tag = "ai"
         elif tl.startswith("file:"):                             self._tag = "file"
         elif "err" in tl:                                        self._tag = "err"
         else:                                                    self._tag = "sys"
@@ -1555,7 +1555,7 @@ class FileDropZone(QWidget):
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a file for EDIT", str(Path.home()),
+            self, "Select a file for LUMEN", str(Path.home()),
             "All Files (*.*);;"
             "Images (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.svg);;"
             "Documents (*.pdf *.docx *.txt *.md *.pptx);;"
@@ -3094,7 +3094,7 @@ class CustomizeOverlay(QWidget):
         "en-US-ChristopherNeural", "tr-TR-AhmetNeural",
     )
 
-    def __init__(self, assistant_name="EDIT", user_name="",
+    def __init__(self, assistant_name="LUMEN", user_name="",
                  ui_color=DEFAULT_UI_COLOR, live_voice="Puck",
                  tts_voice="ru-RU-DmitryNeural", parent=None):
         super().__init__(parent)
@@ -3163,7 +3163,7 @@ class CustomizeOverlay(QWidget):
         lay.addWidget(self._live_combo)
 
         lay.addSpacing(2)
-        lay.addWidget(_lbl("JARVIS VOICE  (EdgeTTS — модуль озвучки)", 8,
+        lay.addWidget(_lbl("LUMEN VOICE  (EdgeTTS — модуль озвучки)", 8,
                            color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         self._tts_combo = QComboBox()
         self._tts_combo.setEditable(True)      # свой id голоса — тоже можно
@@ -3285,7 +3285,7 @@ class CustomizeOverlay(QWidget):
         self.hide()
 
     def _save(self):
-        name = self._name_input.text().strip() or "EDIT"
+        name = self._name_input.text().strip() or "LUMEN"
         user = self._user_input.text().strip()
         lv   = self._live_combo.currentText().strip()
         tv   = self._tts_combo.currentText().strip()
@@ -3294,7 +3294,7 @@ class CustomizeOverlay(QWidget):
 
 
 class ClipboardPanel(QWidget):
-    """Floating panel shown when text is copied — offers quick Jarvis actions."""
+    """Floating panel shown when text is copied — offers quick LUMEN actions."""
 
     action_requested = pyqtSignal(str)
     _W, _H = 326, 112
@@ -3683,7 +3683,7 @@ class RemoteKeyOverlay(QWidget):
         self._qr_label.setStyleSheet(
             "color: #00ff88; background: #001a0d; border-radius: 10px;"
         )
-        self._timer_lbl.setText("Phone connected — EDIT ready")
+        self._timer_lbl.setText("Phone connected — LUMEN ready")
         self._timer_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent;")
 
     def _refresh_key(self):
@@ -3745,7 +3745,7 @@ class MainWindow(QMainWindow):
 
         # Load customization from config
         _cfg = _read_full_config()
-        self._assistant_name: str = (_cfg.get("assistant_name") or "EDIT").strip()
+        self._assistant_name: str = (_cfg.get("assistant_name") or "LUMEN").strip()
         _display = self._assistant_name.upper()
 
         # Kayıtlı UI rengini panel/stylesheet'ler kurulmadan ÖNCE uygula
@@ -3753,7 +3753,7 @@ class MainWindow(QMainWindow):
         if _ui_color and _ui_color.lower() != DEFAULT_UI_COLOR:
             apply_ui_accent(_ui_color)
 
-        self.setWindowTitle(f"{_display} — MARK XLIX")
+        self.setWindowTitle(f"{_display} — LUMEN")
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
 
@@ -3765,7 +3765,7 @@ class MainWindow(QMainWindow):
 
         self.on_text_command   = None
         self.on_remote_clicked = None   # callable: () -> (url, key) | None
-        self.on_interrupt      = None   # callable: () -> None — stop JARVIS mid-speech
+        self.on_interrupt      = None   # callable: () -> None — stop LUMEN mid-speech
         self.on_headphones_toggle = None  # callable: () -> None — toggle 🎧 mode
         self.on_internet_toggle   = None  # callable: () -> None — toggle 🌐 tunnel
         self._muted            = False
@@ -3912,7 +3912,7 @@ class MainWindow(QMainWindow):
         self._feed_mode = "none"             # none | camera | scan | phonecam — who owns the HUD area
         self._pcam_px   = None               # latest phone live frame (QPixmap)
         self._pcam_dets: list = []           # latest live detections for that frame
-        self._scan_px   = None               # frozen EDITH scan frame (QPixmap)
+        self._scan_px   = None               # frozen LUMEN scan frame (QPixmap)
         self._scan_dets: list = []           # detections for that frozen frame
         self.devices_provider = None         # set by main.py: () -> list[dict]
         self.devices_kicker   = None         # set by main.py: (dev_id | "revoke") -> None
@@ -4031,10 +4031,10 @@ class MainWindow(QMainWindow):
         self._pcam_dets = []
         self._cam_stream_sig.emit(False)
 
-    # --- Shared EDITH box painter -------------------------------------------
+    # --- Shared LUMEN box painter -------------------------------------------
     _DET_COLORS = None   # lazily built QColor map
 
-    # Bone chain for the EDITH skeleton overlay
+    # Bone chain for the LUMEN skeleton overlay
     _BONES = (
         ("head", "neck"),
         ("neck", "l_shoulder"), ("neck", "r_shoulder"),
@@ -4055,7 +4055,7 @@ class MainWindow(QMainWindow):
 
     def _draw_person_fx(self, p: QPainter, d: dict, sw: int, sh: int,
                         x: int, y: int, bw: int, bh: int) -> None:
-        """EDITH-style person effect: glowing silhouette aura + red bone rig."""
+        """LUMEN-style person effect: glowing silhouette aura + red bone rig."""
         ph    = self._person_phase()
         pulse = 0.5 + 0.5 * math.sin(ph * 2 * math.pi)
 
@@ -4332,7 +4332,7 @@ class MainWindow(QMainWindow):
 
     def _draw_dets_on(self, px2: QPixmap, detections) -> None:
         """Paint labeled detection boxes (0-1000 normalized) onto a pixmap.
-        People additionally get the EDITH silhouette-aura + skeleton effect."""
+        People additionally get the LUMEN silhouette-aura + skeleton effect."""
         if self._DET_COLORS is None:
             type(self)._DET_COLORS = {
                 "person":  QColor("#f97316"),
@@ -4378,7 +4378,7 @@ class MainWindow(QMainWindow):
                         p.setBrush(Qt.BrushStyle.NoBrush)
                         p.drawRect(x, y, bw, bh)
                 elif kind == "person":
-                    # full EDITH treatment: aura outline + bones + brackets
+                    # full LUMEN treatment: aura outline + bones + brackets
                     try:
                         self._draw_person_fx(p, d, sw, sh, x, y, bw, bh)
                     except Exception:
@@ -4471,7 +4471,7 @@ class MainWindow(QMainWindow):
         self._cam_live_lbl.setPixmap(px2)
         self._sync_fx_timer()
 
-    # --- Phone scan overlay (EDITH snapshot with detection boxes) ----------
+    # --- Phone scan overlay (LUMEN snapshot with detection boxes) ----------
     def _on_phone_scan(self, img_bytes: bytes, detections) -> None:
         """Slot (main thread): draw the phone's scanned frame + labeled boxes."""
         px = QPixmap()
@@ -4479,7 +4479,7 @@ class MainWindow(QMainWindow):
         if px.isNull():
             return
         self._feed_mode = "scan"
-        self._cam_title.setText("◈  PHONE SCAN — EDITH")
+        self._cam_title.setText("◈  PHONE SCAN — LUMEN")
         self._hud_cam_stack.setCurrentIndex(1)
 
         self._scan_px   = px
@@ -4496,7 +4496,7 @@ class MainWindow(QMainWindow):
         self._draw_dets_on(px2, self._scan_dets)
         self._cam_live_lbl.setPixmap(px2)
 
-    # --- EDITH person-effect animation --------------------------------------
+    # --- LUMEN person-effect animation --------------------------------------
     def _has_person(self) -> bool:
         dets = (self._scan_dets if self._feed_mode == "scan" else self._pcam_dets)
         return any(isinstance(d, dict) and d.get("kind") in ("person", "face")
@@ -4536,9 +4536,9 @@ class MainWindow(QMainWindow):
     # Icon generation — arc-reactor style, rendered with Pillow
     # ------------------------------------------------------------------
     @staticmethod
-    def _build_jarvis_icon(out_path: Path) -> bool:
+    def _build_lumen_icon(out_path: Path) -> bool:
         """
-        Render a JARVIS arc-reactor icon at 4× resolution and downsample
+        Render a LUMEN arc-reactor icon at 4× resolution and downsample
         for crisp results at all sizes. Saves a multi-res .ico to out_path.
         Returns True on success.
         """
@@ -4778,9 +4778,9 @@ class MainWindow(QMainWindow):
         desktop = self._get_desktop_dir()
 
         # Arc-reactor icon (.ico — also exported as .png for Linux/macOS)
-        ico_path = Path(__file__).resolve().parent / "config" / "jarvis.ico"
+        ico_path = Path(__file__).resolve().parent / "config" / "lumen.ico"
         if not ico_path.exists():
-            self._build_jarvis_icon(ico_path)
+            self._build_lumen_icon(ico_path)
 
         try:
             _os = platform.system()
@@ -4804,7 +4804,7 @@ class MainWindow(QMainWindow):
 
                 # Launcher executable (bash — runs as background process,
                 # macOS does NOT open Terminal for executables inside .app bundles)
-                launcher = mac_dir / "JARVIS"
+                launcher = mac_dir / "LUMEN"
                 launcher.write_text(
                     "#!/usr/bin/env bash\n"
                     f'cd "{script.parent}"\n'
@@ -4819,9 +4819,9 @@ class MainWindow(QMainWindow):
                     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                     '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                     '<plist version="1.0"><dict>\n'
-                    '  <key>CFBundleExecutable</key><string>JARVIS</string>\n'
+                    '  <key>CFBundleExecutable</key><string>LUMEN</string>\n'
                     '  <key>CFBundleIdentifier</key>'
-                    '<string>com.jarvis.assistant</string>\n'
+                    '<string>com.lumen.assistant</string>\n'
                     '  <key>CFBundleName</key><string>J.A.R.V.I.S</string>\n'
                     '  <key>CFBundlePackageType</key><string>APPL</string>\n'
                     '  <key>CFBundleVersion</key><string>1.0</string>\n'
@@ -5006,7 +5006,7 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
-        lay.addWidget(_badge("MARK XLIX", C.PRI_DIM))
+        lay.addWidget(_badge("LUMEN", C.PRI_DIM))
         lay.addSpacing(8)
         self._drawer_btn = QPushButton("⚙")
         self._drawer_btn.setFixedSize(26, 26)
@@ -5033,8 +5033,8 @@ class MainWindow(QMainWindow):
         self._title_lbl.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
         self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(self._title_lbl)
-        _sub_text = ("Just A Rather Very Intelligent System"
-                     if _disp in ("JARVIS", "J.A.R.V.I.S")
+        _sub_text = ("Свет, который понимает"
+                     if _disp == "LUMEN"
                      else "Personal AI Assistant")
         self._sub_lbl = QLabel(_sub_text)
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -5771,17 +5771,23 @@ class MainWindow(QMainWindow):
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
                 try:
-                    winreg.QueryValueEx(key, "JARVIS_AI")
-                    return True
-                except FileNotFoundError:
+                    for val in ("LUMEN_AI", "JARVIS_AI"):  # JARVIS_AI — legacy
+                        try:
+                            winreg.QueryValueEx(key, val)
+                            return True
+                        except FileNotFoundError:
+                            continue
                     return False
                 finally:
                     winreg.CloseKey(key)
             elif _OS == "Darwin":
-                return (Path.home() / "Library" / "LaunchAgents"
-                        / "com.jarvis.assistant.plist").exists()
+                la = Path.home() / "Library" / "LaunchAgents"
+                return (la / "com.lumen.assistant.plist").exists() or \
+                       (la / "com.jarvis.assistant.plist").exists()
             else:
-                return (Path.home() / ".config" / "autostart" / "jarvis.desktop").exists()
+                au = Path.home() / ".config" / "autostart"
+                return (au / "lumen.desktop").exists() or \
+                       (au / "jarvis.desktop").exists()
         except Exception:
             return False
 
@@ -5793,27 +5799,31 @@ class MainWindow(QMainWindow):
                 import winreg
                 reg = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
-                if currently_on:
-                    winreg.DeleteValue(reg, "JARVIS_AI")
-                else:
+                for val in ("LUMEN_AI", "JARVIS_AI"):  # чистим и legacy-ключ
+                    try:
+                        winreg.DeleteValue(reg, val)
+                    except FileNotFoundError:
+                        pass
+                if not currently_on:
                     pythonw = Path(sys.executable).parent / "pythonw.exe"
                     exe = str(pythonw if pythonw.exists() else sys.executable)
-                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ,
+                    winreg.SetValueEx(reg, "LUMEN_AI", 0, winreg.REG_SZ,
                                       f'"{exe}" "{script}"')
                 winreg.CloseKey(reg)
             elif _OS == "Darwin":
                 plist_dir = Path.home() / "Library" / "LaunchAgents"
                 plist_dir.mkdir(parents=True, exist_ok=True)
-                plist = plist_dir / "com.jarvis.assistant.plist"
+                plist = plist_dir / "com.lumen.assistant.plist"
                 if currently_on:
                     plist.unlink(missing_ok=True)
+                    (plist_dir / "com.jarvis.assistant.plist").unlink(missing_ok=True)
                 else:
                     plist.write_text(
                         '<?xml version="1.0" encoding="UTF-8"?>\n'
                         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                         '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                         '<plist version="1.0"><dict>\n'
-                        '  <key>Label</key><string>com.jarvis.assistant</string>\n'
+                        '  <key>Label</key><string>com.lumen.assistant</string>\n'
                         '  <key>ProgramArguments</key><array>\n'
                         f'    <string>{sys.executable}</string>\n'
                         f'    <string>{script}</string>\n'
@@ -5824,9 +5834,10 @@ class MainWindow(QMainWindow):
             else:
                 desk_dir = Path.home() / ".config" / "autostart"
                 desk_dir.mkdir(parents=True, exist_ok=True)
-                desk = desk_dir / "jarvis.desktop"
+                desk = desk_dir / "lumen.desktop"
                 if currently_on:
                     desk.unlink(missing_ok=True)
+                    (desk_dir / "jarvis.desktop").unlink(missing_ok=True)
                 else:
                     desk.write_text(
                         "[Desktop Entry]\n"
@@ -6130,7 +6141,7 @@ class MainWindow(QMainWindow):
             self._customize_overlay.hide()
         cw = self.centralWidget()
         ov = CustomizeOverlay(
-            cfg.get("assistant_name", "EDIT") or "EDIT",
+            cfg.get("assistant_name", "LUMEN") or "LUMEN",
             cfg.get("user_name", ""),
             cfg.get("ui_color", "") or DEFAULT_UI_COLOR,
             live_voice=cfg.get("voice_name", "") or "Puck",
@@ -6158,14 +6169,12 @@ class MainWindow(QMainWindow):
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
                            live_voice: str = "", tts_voice: str = ""):
         """Update all name/theme-dependent UI elements and persist to config."""
-        self._assistant_name = name.strip() or "EDIT"
+        self._assistant_name = name.strip() or "LUMEN"
         display = self._assistant_name.upper()
-        self.setWindowTitle(f"{display} — MARK XLIX")
+        self.setWindowTitle(f"{display} — ИИ-платформа")
         self._title_lbl.setText(display)
-        if display in ("JARVIS", "J.A.R.V.I.S"):
-            self._sub_lbl.setText("Just A Rather Very Intelligent System")
-        elif display in ("EDIT", "EDITH", "E.D.I.T.H.", "E.D.I.T.H", "ЭДИТ"):
-            self._sub_lbl.setText("Even Dead I'm The Hero — Autonomous Evolving AI")
+        if display == "LUMEN":
+            self._sub_lbl.setText("Свет, который понимает")
         else:
             self._sub_lbl.setText("Personal AI Assistant")
         self._log._ai_name_lc = self._assistant_name.lower()
@@ -6324,7 +6333,7 @@ class MainWindow(QMainWindow):
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        self._assistant_name = _read_full_config().get("assistant_name", "EDIT") or "EDIT"
+        self._assistant_name = _read_full_config().get("assistant_name", "LUMEN") or "LUMEN"
         self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
 
 class _RootShim:
@@ -6336,7 +6345,7 @@ class _RootShim:
         pass
 
 
-class JarvisUI:
+class LumenUI:
     def __init__(self, face_path: str, size=None):
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
@@ -6444,7 +6453,7 @@ class JarvisUI:
         self._win.stop_camera_stream()
 
     def show_phone_scan(self, img_bytes: bytes, detections) -> None:
-        """Thread-safe: paint a phone-scanned frame + EDITH boxes onto the HUD area."""
+        """Thread-safe: paint a phone-scanned frame + LUMEN boxes onto the HUD area."""
         self._win._scan_sig.emit(img_bytes, detections)
 
     def start_phone_cam(self) -> None:
