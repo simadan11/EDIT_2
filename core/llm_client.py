@@ -26,6 +26,14 @@ from typing import Callable, Generator
 
 import requests
 
+try:                                    # package import (normal)
+    from core import ollama_local
+except Exception:                       # script / frozen import
+    try:
+        import ollama_local             # type: ignore
+    except Exception:
+        ollama_local = None             # type: ignore
+
 # Matches a sentence boundary: [.!?] followed by whitespace, or a blank line.
 # Avoids splitting on decimals (3.5) because those have no space after the dot.
 _SENT_END = re.compile(r'(?<=[.!?])\s+|(?<=\n)\s*\n')
@@ -41,8 +49,8 @@ CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 _DEFAULTS = {
     "llm_url":      "http://localhost:11434",
-    "llm_model":    "llama3.2",
-    "llm_provider": "ollama",   # "ollama" | "openai"
+    "llm_model":    "",          # "" → auto-detect from the local Ollama store
+    "llm_provider": "ollama",    # "ollama" | "openai"
 }
 
 
@@ -65,6 +73,13 @@ def ensure_ollama_running(timeout: int = 15) -> bool:
     For OpenAI-compatible providers: just ping /v1/models (server must be started manually).
     Returns True if the LLM server is reachable.
     """
+    if ollama_local is not None:
+        # remember / export the model store (e.g. D:\\бодикам) so the server
+        # and every child process see the user's models
+        try:
+            ollama_local.apply_env()
+        except Exception:
+            pass
     url, _   = get_llm_settings()
     provider = get_llm_provider()
 
@@ -97,6 +112,11 @@ def ensure_ollama_running(timeout: int = 15) -> bool:
 
     if _is_up():
         return True
+
+    if ollama_local is not None:
+        ok, msg = ollama_local.start_ollama(wait=timeout)
+        print(f"[LLM] {msg}")
+        return ok
 
     print("[LLM] Ollama not running — launching 'ollama serve'…")
     try:
@@ -186,14 +206,22 @@ def warmup_model(system_prompt: str | None = None) -> bool:
 
 def check_model_available(log: Callable | None = None) -> bool:
     """
-    Returns True if the configured model is already pulled in Ollama.
-    Logs an actionable warning (to console + optional UI callback) if not.
-    Always returns True for non-Ollama providers (cannot inspect their model list).
+    Returns True if the configured model is visible (Ollama server or the
+    on-disk manifest store).  Logs an actionable warning otherwise.
+    Always returns True for non-Ollama providers.
     """
     if get_llm_provider() != "ollama":
         return True
 
     url, model = get_llm_settings()
+    if not model:
+        msg = ("WRN: No local Ollama model configured. Open 🧠 LOCAL MODEL / "
+               "OLLAMA in the settings panel and pick one.")
+        print(msg)
+        if log:
+            log(msg)
+        return False
+
     try:
         resp = requests.get(f"{url}/api/tags", timeout=5)
         resp.raise_for_status()
@@ -203,26 +231,53 @@ def check_model_available(log: Callable | None = None) -> bool:
             m == model or m == model_base or m.startswith(model_base + ":")
             for m in pulled
         )
-        if not found:
-            available = ", ".join(pulled) if pulled else "none"
+        if found:
+            return True
+
+        # The model may still be on disk even if the server is not serving it.
+        disk = []
+        if ollama_local is not None:
+            disk = [m["name"] for m in ollama_local.list_filesystem_models()]
+        if any(m == model or m.split(":")[0] == model_base for m in disk):
+            warn = (
+                f"WRN: Model '{model}' is in the local store but Ollama is not "
+                f"serving it.\n"
+                f"     Model store: {ollama_local.status().get('models_dir')}\n"
+                f"     Fix: open Ollama once with OLLAMA_MODELS pointing to that "
+                f"folder (the PLUGIN MANAGER / LOCAL MODEL panel does this)."
+            )
+        else:
+            available = ", ".join(pulled or disk) or "none"
             warn = (
                 f"WRN: Model '{model}' is not pulled in Ollama.\n"
                 f"     Available: {available}\n"
                 f"     Fix: ollama pull {model}"
             )
-            print(warn)
-            if log:
-                log(f"WRN: '{model}' not found — run: ollama pull {model}")
-        return found
+        print(warn)
+        if log:
+            log(warn.splitlines()[0])
+        return False
     except Exception:
         return True   # Ollama might still be starting up; non-blocking
 
 
 def get_llm_settings() -> tuple[str, str]:
-    """Returns (base_url, model_name)."""
+    """Returns (base_url, model_name).
+
+    When  llm_model  is empty (or  llm_model_auto  is true) the model is
+    picked from the local Ollama store: the user's own models in
+    D:\\бодикам\\manifests-v2\\ollama.com\\huihui_ai\\… are preferred.
+    """
     cfg   = _load_config()
-    url   = cfg.get("llm_url",   _DEFAULTS["llm_url"]).rstrip("/")
-    model = cfg.get("llm_model", _DEFAULTS["llm_model"])
+    url   = (cfg.get("llm_url") or _DEFAULTS["llm_url"]).rstrip("/")
+    model = (cfg.get("llm_model") or "").strip()
+    if get_llm_provider() == "ollama" and ollama_local is not None:
+        try:
+            model = ollama_local.resolve_model(model or None) or model
+        except Exception:
+            pass
+    if not model:
+        model = cfg.get("local_claude_model") or _DEFAULTS["llm_model"] or "llama3.2"
     return url, model
 
 
@@ -339,6 +394,15 @@ def call_llm_text(
     Used by planner, executor, error_handler, code_helper, dev_agent.
     """
     url, default_model = get_llm_settings()
+    provider = get_llm_provider()
+    if provider == "openai":
+        res = call_llm(
+            ([{"role": "system", "content": system}] if system else [])
+            + [{"role": "user", "content": prompt}],
+            timeout=timeout,
+        )
+        return res.get("content", "")
+
     endpoint = f"{url}/api/chat"
     m        = model or default_model
 

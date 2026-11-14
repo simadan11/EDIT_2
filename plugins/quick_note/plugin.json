@@ -1,0 +1,31 @@
+{
+    "name": "quick_note",
+    "title": "Quick Notes",
+    "version": "1.0.0",
+    "author": "EDIT",
+    "description": "Save, list and delete short notes in a local JSON file.",
+    "entry": "plugin.py",
+    "tools": [
+        {
+            "name": "note_save",
+            "description": "Save a short note / reminder text locally.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Note text"}
+                },
+                "required": ["text"]
+            }
+        },
+        {
+            "name": "note_list",
+            "description": "List the saved notes.",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        },
+        {
+            "name": "note_clear",
+            "description": "Delete all saved notes.",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+    ]
+}

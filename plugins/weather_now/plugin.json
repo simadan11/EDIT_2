@@ -1,0 +1,24 @@
+{
+    "name": "weather_now",
+    "title": "Weather Now",
+    "version": "1.0.0",
+    "author": "EDIT",
+    "description": "Current weather for any city via the free wttr.in service (no API key).",
+    "entry": "plugin.py",
+    "tools": [
+        {
+            "name": "weather_now",
+            "description": "Get current weather and today's forecast for a city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "City name, e.g. Kharkiv"
+                    }
+                },
+                "required": ["city"]
+            }
+        }
+    ]
+}

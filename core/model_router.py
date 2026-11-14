@@ -17,6 +17,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:                                    # package import (normal)
+    from core import ollama_local
+except Exception:                       # script / frozen import
+    try:
+        import ollama_local             # type: ignore
+    except Exception:
+        ollama_local = None             # type: ignore
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 API_FILE = BASE_DIR / "config" / "api_keys.json"
 
@@ -46,14 +54,32 @@ def is_osint_mode() -> bool:
 
 
 def get_local_config() -> dict:
-    """Возвращает настройки локальной модели."""
+    """Настройки локальной модели (Ollama / LM Studio).
+
+    Модель берётся из llm_model / local_claude_model, а если там пусто —
+    автоматически из локального хранилища Ollama (папка вида
+    D:\\бодикам\\manifests-v2\\ollama.com\\huihui_ai\\…).
+    """
     cfg = _load_config()
-    if not cfg.get("use_local_claude"):
+    if not cfg.get("use_local_claude") and cfg.get("llm_provider", "ollama") != "ollama":
         return {}
+    url = (cfg.get("llm_url") or "http://localhost:11434").rstrip("/")
+    base = (cfg.get("local_claude_base_url") or f"{url}/v1").rstrip("/")
+    model = (cfg.get("llm_model") or cfg.get("local_claude_model") or "").strip()
+    if model and not cfg.get("llm_model_auto", True):
+        resolved = model
+    else:
+        resolved = model
+        if ollama_local is not None:
+            try:
+                resolved = ollama_local.resolve_model(model or None) or model
+            except Exception:
+                pass
+        resolved = resolved or model or "llama3.2"
     return {
-        "base_url": cfg.get("local_claude_base_url", "http://localhost:11434/v1"),
+        "base_url": base,
         "api_key": cfg.get("local_claude_api_key", "ollama"),
-        "model": cfg.get("local_claude_model", "llama3.1"),
+        "model": resolved,
     }
 
 
@@ -145,9 +171,26 @@ def _chat_gemini(
 # Локальные модели (без цензуры)
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _ensure_local_server() -> None:
+    """Start Ollama when the configured endpoint is on this machine."""
+    if ollama_local is None:
+        return
+    cfg = get_local_config()
+    base = (cfg.get("base_url") or "").lower()
+    if "localhost" not in base and "127.0.0.1" not in base:
+        return
+    try:
+        if not ollama_local.is_server_up():
+            ok, msg = ollama_local.start_ollama()
+            print(f"[LLM] {msg}" if ok else f"[LLM] {msg}")
+    except Exception as e:
+        print(f"[LLM] Could not start Ollama: {e}")
+
+
 def _get_openai_client():
     from openai import OpenAI
 
+    _ensure_local_server()
     cfg = get_local_config()
     return OpenAI(
         base_url=cfg["base_url"],
@@ -160,13 +203,15 @@ def _generate_local(prompt: str, model: Optional[str] = None, **kwargs) -> str:
     cfg = get_local_config()
     m = model or cfg["model"]
 
-    resp = client.completions.create(
+    # /v1/chat/completions is supported by every Ollama release; the legacy
+    # completions endpoint is not, so a prompt is sent as one user message.
+    resp = client.chat.completions.create(
         model=m,
-        prompt=prompt,
+        messages=[{"role": "user", "content": prompt}],
         max_tokens=kwargs.get("max_tokens", 2048),
         temperature=kwargs.get("temperature", 0.7),
     )
-    return resp.choices[0].text.strip()
+    return (resp.choices[0].message.content or "").strip()
 
 
 def _chat_local(
@@ -233,7 +278,14 @@ def print_model_status():
     """Печатает текущий режим (удобно при старте)."""
     if is_local_mode():
         cfg = get_local_config()
-        print(f"🧠 ЛОКАЛЬНАЯ МОДЕЛЬ БЕЗ ЦЕНЗУРЫ: {cfg['model']}")
+        print(f"🧠 ЛОКАЛЬНАЯ МОДЕЛЬ (Ollama): {cfg['model']}")
         print(f"   Endpoint: {cfg['base_url']}")
+        if ollama_local is not None:
+            try:
+                st = ollama_local.status()
+                print(f"   Model dir: {st.get('models_dir') or 'not found'}")
+                print(f"   Ollama server: {'online' if st.get('server_up') else 'offline'}")
+            except Exception:
+                pass
     else:
         print("☁️  Gemini (Google)")

@@ -1,0 +1,24 @@
+{
+    "name": "system_report",
+    "title": "System Report",
+    "version": "1.0.0",
+    "author": "EDIT",
+    "description": "Reports CPU load, RAM, disks, battery and uptime of this PC.",
+    "entry": "plugin.py",
+    "tools": [
+        {
+            "name": "system_report",
+            "description": "Get the current CPU load, RAM usage, disk space, battery level and uptime of the PC.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "type": "string",
+                        "description": "short | full (default: short)"
+                    }
+                },
+                "required": []
+            }
+        }
+    ]
+}

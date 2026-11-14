@@ -7,6 +7,24 @@ A real-time voice AI that can hear, see, understand, and control your computer �
 
 ---
 
+## 🧠 Local AI (Ollama) + 🧩 Plugin Manager
+
+This build runs on **your own local model** — the models in `D:\бодикам`
+(`manifests-v2\ollama.com\huihui_ai\…`) are detected automatically and Ollama
+is started with the right `OLLAMA_MODELS` folder.
+
+* **🧠 LOCAL MODEL / OLLAMA** button — scans the disk, lists models, starts
+  `ollama serve`, activates the chosen model, tests it.
+* **🧩 PLUGIN MANAGER** button — enable/disable plugins, install `.py` / `.zip`
+  plugins, they instantly become AI tools.
+* Typed commands + every tool/action run locally through Ollama
+  (toggle **💬 LOCAL CHAT** in the settings panel)
+  (`core/local_agent.py`, `core/model_router.py`, `core/llm_client.py`).
+
+Full Russian guide: **[LOCAL_AI_AND_PLUGINS_RU.md](LOCAL_AI_AND_PLUGINS_RU.md)**
+
+---
+
 ## ✨ Overview
 
 MARK L is where the assistant stops being a tool and starts being a presence. It remembers yesterday's conversation, watches the topics you care about, and speaks first when it has something worth saying. The goal of this build was continuity — JARVIS should feel like it never fully left, even after you close it.

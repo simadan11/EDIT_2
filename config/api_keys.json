@@ -3,5 +3,19 @@
     "os_system": "windows",
     "live_model": "models/gemini-2.5-flash-native-audio-preview-12-2025",
     "headphones_mode": false,
-    "wake_bracket": true
+    "wake_bracket": true,
+    "llm_provider": "ollama",
+    "llm_url": "http://localhost:11434",
+    "llm_model": "",
+    "llm_model_auto": true,
+    "ollama_models_dir": "D:\\бодикам",
+    "ollama_models_dir_extra": [
+        "D:\\бодикам\\models",
+        "D:\\бодикам\\manifests-v2"
+    ],
+    "use_local_claude": true,
+    "local_claude_base_url": "http://localhost:11434/v1",
+    "local_claude_model": "",
+    "local_claude_api_key": "ollama",
+    "local_llm_chat": true
 }

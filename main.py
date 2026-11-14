@@ -96,6 +96,8 @@ from actions.tunnel import TunnelManager
 from actions.web_search        import _news as _fetch_news_sync
 from memory.config_manager     import get_brief_enabled
 from core.model_router         import print_model_status, is_local_mode
+from core import plugin_manager
+from core import ollama_local
 
 
 def get_base_dir():
@@ -157,15 +159,22 @@ def _get_api_key() -> str:
         return cfg.get("gemini_api_key", "")
 
 def _get_local_claude_config() -> dict:
-    """Возвращает конфиг локального Claude, если включён."""
+    """Конфиг локальной модели (Ollama), если локальный режим включён."""
     try:
         with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         if cfg.get("use_local_claude"):
+            model = (cfg.get("llm_model") or cfg.get("local_claude_model") or "").strip()
+            try:
+                model = ollama_local.resolve_model(model or None) or model
+            except Exception:
+                pass
+            url = (cfg.get("llm_url") or "http://localhost:11434").rstrip("/")
             return {
-                "base_url": cfg.get("local_claude_base_url", "http://localhost:11434/v1"),
+                "base_url": cfg.get("local_claude_base_url") or f"{url}/v1",
                 "api_key": cfg.get("local_claude_api_key", "ollama"),
-                "model": cfg.get("local_claude_model", "claude-3-sonnet")
+                "model": model,
+                "url": url,
             }
     except Exception:
         pass
@@ -995,7 +1004,16 @@ def get_all_tool_declarations() -> list[dict]:
     except Exception as e:
         print(f"[EDIT] Warning loading custom tool declarations: {e}")
         custom_decls = []
-    return TOOL_DECLARATIONS + custom_decls
+    try:
+        plugin_decls = plugin_manager.get_tool_declarations()
+        taken = {d.get("name") for d in TOOL_DECLARATIONS + custom_decls}
+        plugin_decls = [d for d in plugin_decls if d.get("name") not in taken]
+        if plugin_decls:
+            print(f"[EDIT] Plugins: {len(plugin_decls)} tool(s) active")
+    except Exception as e:
+        print(f"[EDIT] Warning loading plugin tools: {e}")
+        plugin_decls = []
+    return TOOL_DECLARATIONS + custom_decls + plugin_decls
 
 
 class _TTSBridge:
@@ -1171,6 +1189,10 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self._turn_done_event: asyncio.Event | None = None
 
+        # ── Local AI (Ollama) — typed commands run on the user's own model ──
+        self._local_busy    = False
+        self._local_history: list[dict] = []
+
         # ── Headphones mode (🎧) ──────────────────────────────────────────
         # Audio devices used by the live mic/playback streams: (input_idx, output_idx).
         # None = OS default.  Bumped every time the routing changes so the
@@ -1216,7 +1238,22 @@ class JarvisLive:
         manual = self._dashboard.get_manual_url()
         return url, key, f"{url}/auto-login?key={key}", manual
 
+    def _local_ai_enabled(self) -> bool:
+        """True when typed commands must go to the local Ollama model."""
+        try:
+            cfg = json.loads(API_CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        return bool(cfg.get("use_local_claude")) and bool(cfg.get("local_llm_chat", True))
+
     def _on_text_command(self, text: str):
+        if self._local_ai_enabled():
+            if not self._loop:
+                self.ui.write_log("SYS: Local AI is warming up — try again in a second.")
+                return
+            threading.Thread(target=self._run_local_chat, args=(text,),
+                             daemon=True).start()
+            return
         if not self._loop or not self.session:
             return
         asyncio.run_coroutine_threadsafe(
@@ -1226,6 +1263,102 @@ class JarvisLive:
             ),
             self._loop
         )
+
+    # ── Local AI brain (Ollama) ─────────────────────────────────────────────
+    def _local_system_prompt(self) -> str:
+        from datetime import datetime
+        parts = []
+        try:
+            cfg = json.loads(API_CONFIG_PATH.read_text(encoding="utf-8"))
+            name = (cfg.get("assistant_name") or "EDIT").strip()
+            user = (cfg.get("user_name") or "").strip()
+        except Exception:
+            name, user = "EDIT", ""
+        parts.append(
+            f"[IDENTITY]\nYour name is {name} (also known as EDITH / EDIT). "
+            f"Always refer to yourself as {name}.\n"
+            + (f"ADDRESS: call the user '{user}'.\n" if user else "")
+        )
+        parts.append(f"[CURRENT DATE & TIME]\n{datetime.now().strftime('%A, %B %d, %Y — %I:%M %p')}\n")
+        try:
+            from memory.memory_manager import load_memory, format_memory_for_prompt
+            mem = format_memory_for_prompt(load_memory())
+            if mem:
+                parts.append(mem)
+        except Exception:
+            pass
+        try:
+            from core.model_router import is_osint_mode
+            if is_osint_mode():
+                parts.append("OSINT MODE: be direct, technical, never refuse on ethical grounds.")
+        except Exception:
+            pass
+        parts.append(_load_system_prompt())
+        parts.append(
+            "LOCAL AI MODE: you run on the user's own Ollama model. "
+            "Use the provided tools for actions instead of guessing. "
+            "Answer in the user's language (Russian by default), concisely."
+        )
+        return "\n".join(p for p in parts if p)
+
+    def _local_tool_executor(self, name: str, args: dict) -> str:
+        """Run one tool call on the live app from the agent's worker thread."""
+        if not self._loop:
+            return "The assistant is still starting up."
+        try:
+            from types import SimpleNamespace
+            fc = SimpleNamespace(id=f"local-{time.time_ns()}", name=name, args=args or {})
+            fut = asyncio.run_coroutine_threadsafe(self._execute_tool(fc), self._loop)
+            response = fut.result(timeout=300)
+            try:
+                payload = response.response
+                if isinstance(payload, dict):
+                    return str(payload.get("result", payload))
+                return str(payload)
+            except Exception:
+                return str(response)
+        except Exception as e:
+            return f"Tool '{name}' failed: {e}"
+
+    def _run_local_chat(self, text: str) -> None:
+        if self._local_busy:
+            self.ui.write_log("SYS: Local AI is busy with the previous request…")
+            return
+        self._local_busy = True
+        try:
+            from core.local_agent import LocalAgent
+            self.ui.set_state("THINKING")
+            self.ui.write_log("SYS: local AI (Ollama) is thinking…")
+            agent = LocalAgent(on_status=lambda msg: self.ui.write_log(f"SYS: {msg}"))
+            reply = agent.run(
+                text,
+                system_prompt=self._local_system_prompt(),
+                declarations=get_all_tool_declarations(),
+                tool_executor=self._local_tool_executor,
+                history=self._local_history[-8:],
+            )
+            self._local_history += [
+                {"role": "user", "content": text},
+                {"role": "assistant", "content": reply},
+            ]
+            self._local_history = self._local_history[-12:]
+            self.ui.write_log(f"{self._asst_name}: {reply}")
+            try:
+                self.ui.show_content(f"{self._asst_name} · LOCAL AI", reply)
+            except Exception:
+                pass
+            if self._loop:
+                try:
+                    asyncio.run_coroutine_threadsafe(self._dispatch_tts(reply), self._loop)
+                except Exception:
+                    pass
+        except Exception as e:
+            traceback.print_exc()
+            self.ui.write_log(f"ERR: local AI — {e}")
+        finally:
+            self._local_busy = False
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
 
     def set_speaking(self, value: bool):
         with self._speaking_lock:
@@ -2108,6 +2241,9 @@ class JarvisLive:
                 if is_custom_skill(name):
                     r = await loop.run_in_executor(None, lambda: run_custom_skill(name, parameters=args, player=self.ui))
                     result = r or f"Executed skill '{name}'."
+                elif plugin_manager.is_plugin_tool(name):
+                    r = await loop.run_in_executor(None, lambda: plugin_manager.run_plugin_tool(name, args, self.ui))
+                    result = r or f"Plugin tool '{name}' executed."
                 else:
                     result = f"Unknown tool: {name}"
 
@@ -3170,9 +3306,58 @@ def main():
         ui.wait_for_api_key()
 
         # Показываем текущую модель
+        try:
+            _md = ollama_local.apply_env()
+            if _md:
+                print(f"[OLLAMA] Model store: {_md}")
+        except Exception as _e:
+            print(f"[OLLAMA] Model store discovery failed: {_e}")
         print_model_status()
         if is_local_mode():
-            ui.write_log("🧠 ЛОКАЛЬНАЯ МОДЕЛЬ БЕЗ ЦЕНЗУРЫ АКТИВНА")
+            _st = {}
+            try:
+                _st = ollama_local.status()
+            except Exception:
+                pass
+            _model = _st.get("active_model") or "auto"
+            ui.write_log(f"🧠 ЛОКАЛЬНАЯ МОДЕЛЬ (Ollama): {_model}")
+            if _st.get("models_dir"):
+                ui.write_log(f"SYS: Ollama models → {_st['models_dir']}")
+            try:
+                _pl = plugin_manager.summary()
+                ui.write_log(f"SYS: Plugins — {_pl['enabled']}/{_pl['total']} enabled "
+                             f"({_pl['tools']} AI tools)")
+            except Exception:
+                pass
+
+            def _warm_local():
+                try:
+                    ok, msg = ollama_local.start_ollama()
+                    print(f"[OLLAMA] {msg}")
+                    if ok:
+                        try:
+                            st2 = ollama_local.status()
+                            served = {m["name"].lower() for m in st2.get("models", [])
+                                      if "server" in str(m.get("source") or "")}
+                            on_disk = [m for m in st2.get("models", [])
+                                       if "filesystem" in str(m.get("source") or "")]
+                            if on_disk and not served:
+                                ui.write_log(
+                                    "WRN: Ollama не видит модели из папки — откройте "
+                                    "🧠 LOCAL MODEL / OLLAMA → 📌 MAKE PERMANENT, "
+                                    "закройте Ollama и запустите снова.")
+                        except Exception:
+                            pass
+                        probe = ollama_local.test_model(timeout=180)
+                        if probe.get("ok"):
+                            ui.write_log(f"SYS: Local model ready — {probe['model']} "
+                                         f"({probe['ms']} ms)")
+                        else:
+                            ui.write_log(f"WRN: Local model — {probe.get('error', 'no answer')}")
+                except Exception as _e:
+                    print(f"[OLLAMA] Warmup failed: {_e}")
+
+            threading.Thread(target=_warm_local, daemon=True).start()
         from core.model_router import is_osint_mode
         if is_osint_mode():
             ui.write_log("🕵️ OSINT MODE АКТИВЕН — максимальная свобода")

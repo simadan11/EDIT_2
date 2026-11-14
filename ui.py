@@ -19,6 +19,9 @@ if platform.system() == "Windows" and "QT_QPA_PLATFORM" not in os.environ:
 
 import psutil
 
+from core import plugin_manager
+from core import ollama_local
+
 from actions.holo_lab import (
     PART_CATALOG, PARTS_BY_ID, diagnose_project, format_diagnostics,
     normalize_part_ids, parts_for_ids, suggested_part_ids,
@@ -42,6 +45,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox,
     QListWidget, QListWidgetItem, QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
     QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
 )
@@ -3074,6 +3078,499 @@ class RemoteKeyOverlay(QWidget):
         self.closed.emit()
 
 
+# ── Plugin Manager & Local AI (Ollama) dialogs ──────────────────────────────
+
+
+def _dialog_shell(dlg: "QDialog", title: str, subtitle: str) -> QVBoxLayout:
+    """Common look for the plugin / local-model windows."""
+    dlg.setStyleSheet(f"""
+        QDialog {{ background: {C.DARK}; color: {C.TEXT}; }}
+        QLabel {{ color: {C.TEXT}; background: transparent; }}
+        QLabel#hint {{ color: {C.TEXT_DIM}; }}
+        QLineEdit {{
+            background: #00080f; color: {C.TEXT};
+            border: 1px solid {C.BORDER}; border-radius: 3px; padding: 5px 7px;
+        }}
+        QListWidget {{
+            background: #00080f; color: {C.TEXT};
+            border: 1px solid {C.BORDER}; border-radius: 3px;
+            outline: none;
+        }}
+        QListWidget::item {{ padding: 6px 6px; border-bottom: 1px solid #041d2a; }}
+        QListWidget::item:selected {{ background: {C.PRI_GHO}; color: {C.WHITE}; }}
+        QTextEdit {{
+            background: #00080f; color: {C.TEXT_MED};
+            border: 1px solid {C.BORDER}; border-radius: 3px;
+            font-family: "Courier New";
+        }}
+        QPushButton {{
+            background: {C.PANEL2}; color: {C.TEXT_MED};
+            border: 1px solid {C.BORDER}; border-radius: 4px;
+            padding: 6px 10px;
+        }}
+        QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
+        QPushButton#primary {{
+            background: #002436; color: {C.PRI};
+            border: 1px solid {C.PRI};
+        }}
+        QPushButton#primary:hover {{ background: #003b58; color: #ffffff; }}
+    """)
+    root = QVBoxLayout(dlg)
+    root.setContentsMargins(14, 12, 14, 12)
+    root.setSpacing(8)
+    head = QLabel(title)
+    head.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
+    head.setStyleSheet(f"color: {C.PRI};")
+    root.addWidget(head)
+    sub = QLabel(subtitle)
+    sub.setObjectName("hint")
+    sub.setWordWrap(True)
+    sub.setFont(QFont("Segoe UI", 8))
+    root.addWidget(sub)
+    return root
+
+
+class PluginManagerDialog(QDialog):
+    """🧩 Enable/disable, install and remove EDIT plugins."""
+
+    _loaded = pyqtSignal(list)
+    _status = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("🧩 Plugin Manager")
+        self.setMinimumSize(720, 580)
+        self._summary = QLabel("")
+        self._status_lbl = QLabel("")
+        root = _dialog_shell(
+            self, "🧩  PLUGIN MANAGER",
+            "Плагины добавляют ИИ новые инструменты. Включённые плагины сразу "
+            "доступны локальной модели (Ollama); для Gemini — после переподключения сессии.",
+        )
+
+        self._summary.setFont(QFont("Courier New", 8))
+        self._summary.setStyleSheet(f"color: {C.GREEN};")
+        root.addWidget(self._summary)
+
+        self._list = QListWidget()
+        self._list.setFont(QFont("Segoe UI", 9))
+        self._list.setWordWrap(True)
+        root.addWidget(self._list, stretch=1)
+
+        folder_row = QHBoxLayout()
+        self._folder = QLineEdit()
+        self._folder.setReadOnly(True)
+        self._folder.setFont(QFont("Courier New", 8))
+        folder_row.addWidget(self._folder, stretch=1)
+        open_btn = QPushButton("📂  OPEN FOLDER")
+        open_btn.clicked.connect(lambda: self._act(
+            lambda: plugin_manager.open_plugins_folder(), "Folder opened."))
+        folder_row.addWidget(open_btn)
+        root.addLayout(folder_row)
+
+        btn_row = QHBoxLayout()
+        install_btn = QPushButton("＋  INSTALL PLUGIN (.py / .zip)")
+        install_btn.setObjectName("primary")
+        install_btn.clicked.connect(self._install)
+        btn_row.addWidget(install_btn)
+        folder_install = QPushButton("＋  INSTALL FOLDER")
+        folder_install.clicked.connect(self._install_folder)
+        btn_row.addWidget(folder_install)
+        remove_btn = QPushButton("🗑  REMOVE")
+        remove_btn.clicked.connect(self._remove)
+        btn_row.addWidget(remove_btn)
+        reload_btn = QPushButton("⟳  RELOAD")
+        reload_btn.clicked.connect(self._reload)
+        btn_row.addWidget(reload_btn)
+        close_btn = QPushButton("CLOSE")
+        close_btn.clicked.connect(self.reject)
+        btn_row.addWidget(close_btn)
+        root.addLayout(btn_row)
+
+        self._status_lbl.setFont(QFont("Courier New", 8))
+        self._status_lbl.setWordWrap(True)
+        self._status_lbl.setStyleSheet(f"color: {C.TEXT_DIM};")
+        root.addWidget(self._status_lbl)
+
+        self._loaded.connect(self._render)
+        self._status.connect(self._set_status)
+        self._list.itemChanged.connect(self._on_item_changed)
+        self._refreshing = False
+        self._refresh()
+
+    # ── data ────────────────────────────────────────────────────────────
+    def _set_status(self, text: str) -> None:
+        self._status_lbl.setText(text)
+
+    def _act(self, fn, ok_text: str = "") -> None:
+        try:
+            result = fn()
+            if isinstance(result, tuple):
+                ok, msg = result
+                self._set_status(msg)
+            elif ok_text:
+                self._set_status(ok_text)
+            self._refresh()
+        except Exception as e:
+            self._set_status(f"Error: {e}")
+
+    def _refresh(self) -> None:
+        try:
+            plugins = plugin_manager.list_plugins()
+            summary = plugin_manager.summary()
+        except Exception as e:
+            self._set_status(f"Plugin manager unavailable: {e}")
+            return
+        self._folder.setText(summary["folder"])
+        self._summary.setText(
+            f"{summary['enabled']} / {summary['total']} enabled  ·  "
+            f"{summary['tools']} AI tool(s) active")
+        self._loaded.emit(plugins)
+
+    def _render(self, plugins: list) -> None:
+        self._refreshing = True
+        self._list.clear()
+        for p in plugins:
+            tools = ", ".join(p.get("tools") or []) or "—"
+            item = QListWidgetItem(
+                f"{p['title']}   v{p['version']}   [{p['name']}]\n"
+                f"{p.get('description') or 'No description'}\n"
+                f"tools: {tools}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, p["name"])
+            item.setToolTip(p.get("path") or "")
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if p["enabled"] else Qt.CheckState.Unchecked)
+            if not p["enabled"]:
+                item.setForeground(QBrush(qcol(C.TEXT_DIM)))
+            self._list.addItem(item)
+        if not plugins:
+            hint = QListWidgetItem(
+                "No plugins yet. Press INSTALL PLUGIN and pick a .py/.zip file, "
+                "or drop a folder into the plugins directory."
+            )
+            hint.setFlags(Qt.ItemFlag.NoItemFlags)
+            hint.setForeground(QBrush(qcol(C.TEXT_DIM)))
+            self._list.addItem(hint)
+        self._refreshing = False
+
+    def _on_item_changed(self, item: QListWidgetItem) -> None:
+        if self._refreshing:
+            return
+        name = item.data(Qt.ItemDataRole.UserRole)
+        if not name:
+            return
+        enabled = item.checkState() == Qt.CheckState.Checked
+        plugin_manager.set_enabled(name, enabled)
+        item.setForeground(QBrush(qcol(C.TEXT if enabled else C.TEXT_DIM)))
+        summary = plugin_manager.summary()
+        self._summary.setText(
+            f"{summary['enabled']} / {summary['total']} enabled  ·  "
+            f"{summary['tools']} AI tool(s) active")
+        self._set_status(
+            f"Plugin '{name}' {'ENABLED' if enabled else 'DISABLED'}.")
+
+    # ── actions ─────────────────────────────────────────────────────────
+    def _install(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Install plugin", "",
+            "Plugins (*.py *.zip);;Python plugin (*.py);;Archive (*.zip)")
+        if not path:
+            return
+        self._act(lambda: plugin_manager.install_plugin(path))
+
+    def _install_folder(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Install plugin folder")
+        if not path:
+            return
+        self._act(lambda: plugin_manager.install_plugin(path))
+
+    def _reload(self) -> None:
+        plugin_manager.reload_plugins()
+        self._refresh()
+        self._set_status("Plugins reloaded.")
+
+    def _remove(self) -> None:
+        item = self._list.currentItem()
+        name = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not name:
+            self._set_status("Select a plugin to remove.")
+            return
+        answer = QMessageBox.question(
+            self, "Remove plugin",
+            f"Delete plugin '{name}' and its folder?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
+            self._act(lambda: plugin_manager.uninstall_plugin(name))
+
+
+class LocalModelDialog(QDialog):
+    """🧠 Point EDIT at the local Ollama store and pick the model."""
+
+    _status_ready = pyqtSignal(dict)
+    _log_line = pyqtSignal(str)
+    _models_ready = pyqtSignal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("🧠 Local AI · Ollama")
+        self.setMinimumSize(760, 620)
+        self._status_data: dict = {}
+
+        root = _dialog_shell(
+            self, "🧠  LOCAL AI  ·  OLLAMA",
+            "Модели берутся с вашего диска (например D:\\бодикам\\manifests-v2\\"
+            "ollama.com\\huihui_ai). Выберите модель — EDIT переключится на "
+            "локальный ИИ без облака.",
+        )
+
+        self._state_lbl = QLabel("scanning…")
+        self._state_lbl.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        self._state_lbl.setStyleSheet(f"color: {C.ACC2};")
+        root.addWidget(self._state_lbl)
+
+        dir_row = QHBoxLayout()
+        self._dir_edit = QLineEdit()
+        self._dir_edit.setFont(QFont("Courier New", 8))
+        self._dir_edit.setPlaceholderText("Ollama model store, e.g. D:\\бодикам")
+        dir_row.addWidget(QLabel("MODELS DIR"))
+        dir_row.addWidget(self._dir_edit, stretch=1)
+        browse_btn = QPushButton("BROWSE")
+        browse_btn.clicked.connect(self._browse_dir)
+        dir_row.addWidget(browse_btn)
+        scan_btn = QPushButton("⟳  SCAN")
+        scan_btn.clicked.connect(self._scan)
+        dir_row.addWidget(scan_btn)
+        root.addLayout(dir_row)
+
+        self._list = QListWidget()
+        self._list.setFont(QFont("Courier New", 9))
+        self._list.itemDoubleClicked.connect(lambda _i: self._activate_selected())
+        root.addWidget(self._list, stretch=1)
+
+        hint = QLabel(
+            "Двойной клик по модели — активировать.  "
+            "Если Ollama не запущена, нажмите START OLLAMA: EDIT запустит "
+            "'ollama serve' с нужной папкой моделей (OLLAMA_MODELS).")
+        hint.setObjectName("hint")
+        hint.setWordWrap(True)
+        hint.setFont(QFont("Segoe UI", 8))
+        root.addWidget(hint)
+
+        btn_row = QHBoxLayout()
+        self._use_btn = QPushButton("▸  USE SELECTED MODEL")
+        self._use_btn.setObjectName("primary")
+        self._use_btn.clicked.connect(self._activate_selected)
+        btn_row.addWidget(self._use_btn)
+        start_btn = QPushButton("▶  START OLLAMA")
+        start_btn.clicked.connect(self._start_server)
+        btn_row.addWidget(start_btn)
+        test_btn = QPushButton("⚡  TEST MODEL")
+        test_btn.clicked.connect(self._test_model)
+        btn_row.addWidget(test_btn)
+        auto_btn = QPushButton("AUTO-PICK")
+        auto_btn.clicked.connect(self._auto_pick)
+        btn_row.addWidget(auto_btn)
+        env_btn = QPushButton("📌 MAKE PERMANENT")
+        env_btn.setToolTip("Прописать OLLAMA_MODELS в системе (setx), чтобы само "
+                           "приложение Ollama видело папку с моделями")
+        env_btn.clicked.connect(self._persist_dir)
+        btn_row.addWidget(env_btn)
+        close_btn = QPushButton("CLOSE")
+        close_btn.clicked.connect(self.reject)
+        btn_row.addWidget(close_btn)
+        root.addLayout(btn_row)
+
+        self._log = QTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setFixedHeight(110)
+        self._log.setFont(QFont("Courier New", 8))
+        root.addWidget(self._log)
+
+        self._status_ready.connect(self._apply_status)
+        self._models_ready.connect(self._apply_status)
+        self._log_line.connect(self._append_log)
+        self._scan()
+
+    # ── helpers ─────────────────────────────────────────────────────────
+    def _append_log(self, text: str) -> None:
+        self._log.append(text)
+
+    def log(self, text: str) -> None:
+        self._log_line.emit(str(text))
+
+    def _browse_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Select Ollama models folder")
+        if path:
+            self._dir_edit.setText(path)
+            self._scan()
+
+    def _selected_model(self) -> str:
+        item = self._list.currentItem()
+        if not item:
+            return ""
+        return item.data(Qt.ItemDataRole.UserRole) or ""
+
+    def _scan(self) -> None:
+        self._append_log("Scanning for Ollama models…")
+        threading.Thread(target=self._scan_worker, daemon=True).start()
+
+    def _scan_worker(self) -> None:
+        try:
+            ollama_local.clear_cache()
+            st = ollama_local.status()
+        except Exception as e:
+            self._log_line.emit(f"Scan failed: {e}")
+            return
+        try:
+            st["models"] = ollama_local.list_models()
+        except Exception:
+            pass
+        self._models_ready.emit(st)
+
+    def _apply_status(self, st: dict) -> None:
+        self._status_data = st or {}
+        up = bool(st.get("server_up"))
+        provider = st.get("provider") or "ollama"
+        active = st.get("active_model") or "—"
+        color = C.GREEN if up else C.ACC
+        self._state_lbl.setText(
+            f"{'● ONLINE' if up else '● OFFLINE'}   ·   provider: {provider.upper()}   "
+            f"·   active: {active}   ·   server: {st.get('url', '')}"
+        )
+        self._state_lbl.setStyleSheet(f"color: {color};")
+        if not self._dir_edit.text().strip() and st.get("models_dir"):
+            self._dir_edit.setText(st["models_dir"])
+
+        models = st.get("models") or []
+        self._list.clear()
+        for m in models:
+            size = ollama_local.human_size(m.get("size") or 0)
+            source = m.get("source") or "filesystem"
+            item = QListWidgetItem(
+                f"{m['name']:<44} {size:>10}   [{source}]")
+            item.setData(Qt.ItemDataRole.UserRole, m["name"])
+            item.setToolTip(m.get("manifest") or m.get("models_dir") or "")
+            if m["name"] == active:
+                item.setForeground(QBrush(qcol(C.GREEN)))
+                f = item.font()
+                f.setBold(True)
+                item.setFont(f)
+            self._list.addItem(item)
+
+        if not models:
+            self._append_log(
+                "No models found. Check the folder (it must contain "
+                "manifests-v2\\ollama.com\\… or manifests\\registry.ollama.ai\\…).")
+        else:
+            self._append_log(f"Found {len(models)} model(s) "
+                             f"in {st.get('models_dir') or '?'}.")
+        if active:
+            self._append_log(f"Active model: {active}")
+        served = {m["name"].lower() for m in models
+                  if "server" in str(m.get("source") or "")}
+        on_disk = [m for m in models
+                   if "filesystem" in str(m.get("source") or "")]
+        if up and on_disk and not served:
+            self._append_log(
+                "⚠ Ollama is running but does not see the models from this folder. "
+                "Press 📌 MAKE PERMANENT, quit Ollama (tray → Quit), start it again, "
+                "then SCAN — or start it from here with the right OLLAMA_MODELS.")
+        if up and active and active != "—" and active.lower() not in served:
+            self._append_log(
+                f"⚠ Active model '{active}' is not served by the running Ollama. "
+                "Restart Ollama with the model folder (📌 MAKE PERMANENT), "
+                "or pick a model from the list that shows [server].")
+        if not st.get("ollama_exe"):
+            self._append_log("Ollama executable not found — install it from ollama.com")
+
+    # ── actions ─────────────────────────────────────────────────────────
+    def _activate_selected(self) -> None:
+        model = self._selected_model()
+        if not model:
+            self._append_log("Select a model first.")
+            return
+        folder = self._dir_edit.text().strip() or self._status_data.get("models_dir", "")
+        self._append_log(f"Activating {model}…")
+
+        def work():
+            try:
+                res = ollama_local.activate(model, folder or None, auto=False)
+                self._log_line.emit(
+                    f"✔ ACTIVE: {res['model']}  (store: {res['models_dir'] or 'default'})")
+                if not ollama_local.is_server_up():
+                    ok, msg = ollama_local.start_ollama()
+                    self._log_line.emit(msg)
+                else:
+                    self._log_line.emit("Ollama server is online.")
+            except Exception as e:
+                self._log_line.emit(f"Activation failed: {e}")
+            self._scan()
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _auto_pick(self) -> None:
+        def work():
+            try:
+                models = ollama_local.list_models()
+                best = ollama_local.pick_best_model(models)
+                if not best:
+                    self._log_line.emit("No models to choose from.")
+                    return
+                res = ollama_local.activate(best, self._dir_edit.text().strip() or None,
+                                           auto=True)
+                self._log_line.emit(f"✔ Auto-picked: {res['model']}")
+            except Exception as e:
+                self._log_line.emit(f"Auto-pick failed: {e}")
+            self._scan()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _start_server(self) -> None:
+        self._append_log("Starting Ollama (this may take a few seconds)…")
+
+        def work():
+            try:
+                md = self._dir_edit.text().strip() or None
+                ok, msg = ollama_local.start_ollama(
+                    Path(md) if md else None)
+                self._log_line.emit(("✔ " if ok else "✖ ") + msg)
+            except Exception as e:
+                self._log_line.emit(f"Start failed: {e}")
+            self._scan()
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _persist_dir(self) -> None:
+        folder = self._dir_edit.text().strip() or self._status_data.get("models_dir", "")
+        if not folder:
+            self._append_log("Choose the models folder first.")
+            return
+        ok, msg = ollama_local.persist_models_dir(folder)
+        self._append_log(("✔ " if ok else "✖ ") + msg)
+        self._append_log("После перезапуска Ollama нажмите SCAN.")
+
+    def _test_model(self) -> None:
+        model = self._selected_model() or (self._status_data.get("active_model") or "")
+        self._append_log(f"Testing {model or 'model'} — first run can take a minute…")
+
+        def work():
+            try:
+                res = ollama_local.test_model(model or None, timeout=240,
+                                              models_dir=self._dir_edit.text().strip() or None)
+                if res.get("ok"):
+                    self._log_line.emit(
+                        f"✔ {res['model']} answered in {res['ms']} ms: {res.get('reply')}")
+                else:
+                    self._log_line.emit(f"✖ {res.get('error') or 'no answer'}")
+            except Exception as e:
+                self._log_line.emit(f"Test failed: {e}")
+            self._scan()
+
+        threading.Thread(target=work, daemon=True).start()
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -4363,6 +4860,25 @@ class MainWindow(QMainWindow):
         self._drawer_btn.setCheckable(True)
         self._drawer_btn.clicked.connect(self._toggle_drawer)
         lay.addWidget(self._drawer_btn)
+
+        def _hdr_button(icon: str, tip: str, handler) -> QPushButton:
+            b = QPushButton(icon)
+            b.setFixedSize(26, 26)
+            b.setFont(QFont("Segoe UI", 11))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(tip)
+            b.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {C.TEXT_DIM};
+                    border: 1px solid {C.BORDER}; border-radius: 4px;
+                }}
+                QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
+            """)
+            b.clicked.connect(handler)
+            return b
+
+        lay.addWidget(_hdr_button("🧩", "Plugin Manager", self._open_plugin_manager))
+        lay.addWidget(_hdr_button("🧠", "Local AI / Ollama models", self._open_local_model))
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(1)
@@ -4637,6 +5153,56 @@ class MainWindow(QMainWindow):
             return l
 
         lay.addWidget(_sec("CONTROLS"))
+
+        # ── Plugin Manager + Local AI (Ollama) ───────────────────────────────
+        self._plugin_btn = QPushButton("🧩  PLUGIN MANAGER")
+        self._plugin_btn.setToolTip("Включать/выключать плагины, ставить новые "
+                                    "инструменты для ИИ (.py / .zip / папка)")
+        self._plugin_btn.setFixedHeight(32)
+        self._plugin_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._plugin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._plugin_btn.setStyleSheet(_BTN_STYLE_PRI)
+        self._plugin_btn.clicked.connect(self._open_plugin_manager)
+        lay.addWidget(self._plugin_btn)
+
+        self._local_model_btn = QPushButton("🧠  LOCAL MODEL / OLLAMA")
+        self._local_model_btn.setToolTip(
+            "Локальный ИИ: найти модели на диске (D:\\бодикам), выбрать "
+            "модель huihui_ai и запустить Ollama")
+        self._local_model_btn.setFixedHeight(32)
+        self._local_model_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._local_model_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._local_model_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #00161f; color: {C.ACC2};
+                border: 1px solid {C.ACC2}; border-radius: 4px;
+                text-align: left; padding: 0 10px;
+            }}
+            QPushButton:hover {{ background: #00222e; color: #ffffff; }}
+        """)
+        self._local_model_btn.clicked.connect(self._open_local_model)
+        lay.addWidget(self._local_model_btn)
+
+        self._model_lbl = QLabel("")
+        self._model_lbl.setWordWrap(True)
+        self._model_lbl.setFont(QFont("Courier New", 7))
+        self._model_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        lay.addWidget(self._model_lbl)
+
+        self._local_chat_btn = QPushButton()
+        self._local_chat_btn.setFixedHeight(28)
+        self._local_chat_btn.setFont(QFont("Courier New", 7))
+        self._local_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._local_chat_btn.clicked.connect(self._toggle_local_chat)
+        lay.addWidget(self._local_chat_btn)
+        self._update_local_chat_btn(_read_full_config().get("local_llm_chat", True))
+        self._refresh_model_label()
+        try:
+            _sum = plugin_manager.summary()
+            self._plugin_btn.setText(
+                f"🧩  PLUGIN MANAGER  ({_sum['enabled']}/{_sum['total']})")
+        except Exception:
+            pass
 
         remote_btn = QPushButton("\u25c9  REMOTE CONTROL")
         remote_btn.setFixedHeight(32)
@@ -5245,8 +5811,20 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._update_local_claude_btn(new_val)
-        status = "ON (локальный Claude)" if new_val else "OFF (Gemini)"
-        self._log.append_log(f"SYS: Локальный Claude — {status}")
+        status = "ON (локальный Ollama)" if new_val else "OFF (Gemini)"
+        self._log.append_log(f"SYS: Локальный ИИ — {status}")
+        if new_val:
+            # make sure a model is selected + the Ollama server is up
+            def _warm():
+                try:
+                    res = ollama_local.activate(auto=True)
+                    ok, msg = ollama_local.start_ollama()
+                    self._log_sig.emit(
+                        f"SYS: Локальная модель — {res.get('model') or 'не найдена'}"
+                        f" | {msg}")
+                except Exception as e:
+                    self._log_sig.emit(f"WRN: Локальный ИИ — {e}")
+            threading.Thread(target=_warm, daemon=True).start()
 
     def _update_local_claude_btn(self, enabled: bool):
         if not hasattr(self, '_local_claude_btn'):
@@ -5462,6 +6040,84 @@ class MainWindow(QMainWindow):
             self._log.append_log(f"ERR: Ошибка запуска карты в браузере: {e}")
 
     # ── Customization ────────────────────────────────────────────────────────────
+
+    # ── Plugin Manager / Local AI dialogs ───────────────────────────────
+    def _open_plugin_manager(self):
+        try:
+            dlg = PluginManagerDialog(self)
+            dlg.exec()
+            summary = plugin_manager.summary()
+            self._log.append_log(
+                f"SYS: Plugins — {summary['enabled']}/{summary['total']} "
+                f"enabled, {summary['tools']} AI tool(s)")
+            if hasattr(self, "_plugin_btn"):
+                self._plugin_btn.setText(
+                    f"🧩  PLUGIN MANAGER  ({summary['enabled']}/{summary['total']})")
+        except Exception as e:
+            self._log.append_log(f"ERR: Plugin manager — {e}")
+
+    def _refresh_model_label(self):
+        """Show the configured local model + folder under the 🧠 button."""
+        if not hasattr(self, "_model_lbl"):
+            return
+        cfg = _read_full_config()
+        model = (cfg.get("llm_model") or "").strip() or "auto (huihui_ai)"
+        folder = (cfg.get("ollama_models_dir") or "").strip() or "default store"
+        mode = "LOCAL" if cfg.get("use_local_claude") else "GEMINI"
+        self._model_lbl.setText(f"{mode} · {model}\n{folder}")
+
+    def _toggle_local_chat(self):
+        cfg = _read_full_config()
+        new_val = not cfg.get("local_llm_chat", True)
+        cfg["local_llm_chat"] = new_val
+        try:
+            API_FILE.write_text(json.dumps(cfg, indent=4, ensure_ascii=False),
+                                encoding="utf-8")
+        except Exception:
+            pass
+        self._update_local_chat_btn(new_val)
+        self._log.append_log(
+            "SYS: Текстовые команды → " + ("локальная модель (Ollama)" if new_val
+                                           else "Gemini Live"))
+
+    def _update_local_chat_btn(self, enabled: bool):
+        if not hasattr(self, "_local_chat_btn"):
+            return
+        if enabled:
+            self._local_chat_btn.setText("💬  LOCAL CHAT: ON")
+            self._local_chat_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: #001a08; color: {C.GREEN};
+                    border: 1px solid {C.GREEN_D}; border-radius: 3px;
+                    text-align: left; padding: 0 8px;
+                }}
+                QPushButton:hover {{ background: #002010; }}
+            """)
+        else:
+            self._local_chat_btn.setText("💬  LOCAL CHAT: OFF")
+            self._local_chat_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {C.PANEL2}; color: {C.TEXT_DIM};
+                    border: 1px solid {C.BORDER}; border-radius: 3px;
+                    text-align: left; padding: 0 8px;
+                }}
+                QPushButton:hover {{ color: {C.TEXT}; border-color: {C.BORDER_B}; }}
+            """)
+
+    def _open_local_model(self):
+        try:
+            dlg = LocalModelDialog(self)
+            dlg.exec()
+            cfg = _read_full_config()
+            self._update_local_claude_btn(cfg.get("use_local_claude", False))
+            self._refresh_model_label()
+            st = ollama_local.status()
+            model = st.get("active_model") or "no model"
+            self._log.append_log(
+                f"SYS: Local AI — {model} | store: {st.get('models_dir') or '?'} | "
+                f"Ollama {'online' if st.get('server_up') else 'offline'}")
+        except Exception as e:
+            self._log.append_log(f"ERR: Local model dialog — {e}")
 
     def _open_customize(self):
         cfg = _read_full_config()

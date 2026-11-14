@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+plugins/*/notes.json
+plugins/*/__pycache__/
+.pytest_cache/
