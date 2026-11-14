@@ -61,7 +61,7 @@ def get_local_config() -> dict:
     D:\\бодикам\\manifests-v2\\ollama.com\\huihui_ai\\…).
     """
     cfg = _load_config()
-    if not cfg.get("use_local_claude") and cfg.get("llm_provider", "ollama") != "ollama":
+    if not cfg.get("use_local_claude"):
         return {}
     url = (cfg.get("llm_url") or "http://localhost:11434").rstrip("/")
     base = (cfg.get("local_claude_base_url") or f"{url}/v1").rstrip("/")

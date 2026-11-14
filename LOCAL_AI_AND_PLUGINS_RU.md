@@ -1,5 +1,11 @@
 # 🧠 Локальный ИИ (Ollama) и 🧩 менеджер плагинов
 
+**Сейчас активен Gemini (как раньше).** Локальная модель — это опция: включить её
+можно кнопкой **🧠 LOCAL AI (OLLAMA): ON** в панели настроек (или в окне
+🧠 LOCAL MODEL → USE SELECTED MODEL). Выключить и вернуться на Gemini — той же
+кнопкой (**OFF**). Всё описанное ниже про Ollama работает только когда локальный
+режим включён.
+
 В интерфейсе появились две кнопки — в шапке (маленькие значки **🧩** и **🧠**) и в
 панели **SETTINGS & CONTROLS** (⚙ слева сверху):
 
@@ -45,25 +51,27 @@ D:\бодикам\manifests\registry.ollama.ai\library\llama3.2\latest
 
 ### Как это работает в EDIT
 
-* `config/api_keys.json`:
+* `config/api_keys.json` (ключ-переключатель — `use_local_claude`):
   ```json
   "llm_provider": "ollama",
   "llm_url": "http://localhost:11434",
   "llm_model": "",              // пусто = авто-выбор (huihui_ai в приоритете)
   "llm_model_auto": true,
   "ollama_models_dir": "D:\\бодикам",
-  "use_local_claude": true,
+  "use_local_claude": false,    // false = Gemini (по умолчанию), true = локальная Ollama
   "local_claude_base_url": "http://localhost:11434/v1",
   "local_claude_model": "",
   "local_llm_chat": true
   ```
-* все действия (code_helper, computer_control, social_osint и т. д.) через
-  `core/model_router.py` идут в Ollama;
+* при `use_local_claude: true` все действия (code_helper, computer_control,
+  social_osint и т. д.) через `core/model_router.py` идут в Ollama, при `false` —
+  в Gemini;
 * набранные вручную команды обрабатывает локальная модель с полным списком
   инструментов (`core/local_agent.py`): она может вызывать действия, плагины,
   скиллы, а ответ озвучивается TTS-модулем;
 * переключатель **💬 LOCAL CHAT** в панели настроек: ON — печатать в Ollama,
-  OFF — отправлять текст в Gemini Live (как раньше);
+  OFF — отправлять текст в Gemini Live; при выключенном LOCAL AI текст всегда
+  идёт в Gemini;
 * при старте EDIT экспортирует `OLLAMA_MODELS`, поднимает сервер и делает
   пробный запрос — в логе видно `Local model ready — <модель> (<ms>)`.
 

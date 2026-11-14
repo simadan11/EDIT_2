@@ -13,7 +13,7 @@
         "D:\\бодикам\\models",
         "D:\\бодикам\\manifests-v2"
     ],
-    "use_local_claude": true,
+    "use_local_claude": false,
     "local_claude_base_url": "http://localhost:11434/v1",
     "local_claude_model": "",
     "local_claude_api_key": "ollama",

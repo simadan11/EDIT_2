@@ -5830,7 +5830,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, '_local_claude_btn'):
             return
         if enabled:
-            self._local_claude_btn.setText("🧠  LOCAL CLAUDE: ON")
+            self._local_claude_btn.setText("🧠  LOCAL AI (OLLAMA): ON")
             self._local_claude_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #001a08; color: {C.GREEN};
@@ -5840,7 +5840,7 @@ class MainWindow(QMainWindow):
                 QPushButton:hover {{ background: #002010; }}
             """)
         else:
-            self._local_claude_btn.setText("🧠  LOCAL CLAUDE: OFF")
+            self._local_claude_btn.setText("🧠  LOCAL AI (OLLAMA): OFF")
             self._local_claude_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: {C.PANEL2}; color: {C.TEXT_DIM};
@@ -6063,8 +6063,11 @@ class MainWindow(QMainWindow):
         cfg = _read_full_config()
         model = (cfg.get("llm_model") or "").strip() or "auto (huihui_ai)"
         folder = (cfg.get("ollama_models_dir") or "").strip() or "default store"
-        mode = "LOCAL" if cfg.get("use_local_claude") else "GEMINI"
-        self._model_lbl.setText(f"{mode} · {model}\n{folder}")
+        if cfg.get("use_local_claude"):
+            self._model_lbl.setText(f"LOCAL · {model}\n{folder}")
+        else:
+            self._model_lbl.setText(
+                "GEMINI · облачная модель\nлокальный ИИ выключен")
 
     def _toggle_local_chat(self):
         cfg = _read_full_config()

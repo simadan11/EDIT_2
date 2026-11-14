@@ -9,9 +9,10 @@ A real-time voice AI that can hear, see, understand, and control your computer �
 
 ## 🧠 Local AI (Ollama) + 🧩 Plugin Manager
 
-This build runs on **your own local model** — the models in `D:\бодикам`
-(`manifests-v2\ollama.com\huihui_ai\…`) are detected automatically and Ollama
-is started with the right `OLLAMA_MODELS` folder.
+**Gemini is the default brain.** The build can also run on **your own local
+model** — the models in `D:\бодикам` (`manifests-v2\ollama.com\huihui_ai\…`)
+are detected automatically and Ollama is started with the right `OLLAMA_MODELS`
+folder. Turn it on/off with **🧠 LOCAL AI (OLLAMA)** in the settings panel.
 
 * **🧠 LOCAL MODEL / OLLAMA** button — scans the disk, lists models, starts
   `ollama serve`, activates the chosen model, tests it.
